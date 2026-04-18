@@ -1,7 +1,7 @@
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 
-export const AGENT_LABEL = "codes.photon.agent";
+export const AGENT_LABEL = "codes.kodama.agent";
 
 export function buildInvocation(): string[] {
   const runner = process.execPath;
@@ -33,9 +33,9 @@ ${args}
     <false/>
   </dict>
   <key>StandardOutPath</key>
-  <string>${escape(logsDir)}/photon.out.log</string>
+  <string>${escape(logsDir)}/kodama.out.log</string>
   <key>StandardErrorPath</key>
-  <string>${escape(logsDir)}/photon.err.log</string>
+  <string>${escape(logsDir)}/kodama.err.log</string>
   <key>EnvironmentVariables</key>
   <dict>
     <key>HOME</key>

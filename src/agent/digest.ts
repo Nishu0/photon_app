@@ -1,14 +1,14 @@
 import { generateText } from "ai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import type { Store } from "../store/open";
-import type { PhotonSettings } from "../settings";
+import type { KodamaSettings } from "../settings";
 import type { DelayedMessenger } from "../spectrum/scheduler";
 import { TwitterApi, type TwitterTweet } from "../integrations/twitterapi";
 import { listWatches, markChecked, type XWatch } from "../store/watches";
 
 export interface DigestDeps {
   store: Store;
-  settings: PhotonSettings;
+  settings: KodamaSettings;
   delayed: DelayedMessenger;
   twitter: TwitterApi;
 }

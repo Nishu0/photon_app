@@ -1,7 +1,7 @@
 import { tool } from "ai";
 import { z } from "zod";
 import type { Store } from "../store/open";
-import type { PhotonSettings } from "../settings";
+import type { KodamaSettings } from "../settings";
 import { addJournal, averageMoodSince, fetchJournalSince } from "../store/journal";
 import { completeTask, createTask, dropTask, listOpenTasks, snoozeTask } from "../store/tasks";
 import { stash } from "../store/keyring";
@@ -13,7 +13,7 @@ import { runDigestOnce, type DigestDeps } from "../agent/digest";
 
 export interface ToolContext {
   store: Store;
-  settings: PhotonSettings;
+  settings: KodamaSettings;
   now: Date;
   scheduleReminder: (body: string, at: Date) => Promise<string>;
   twitter?: TwitterApi;
@@ -138,7 +138,7 @@ export function buildMindTools(ctx: ToolContext) {
           .describe("what kinds of posts the owner wants summarized (e.g. 'web3 job posts', 'funding rounds')")
       }),
       execute: async ({ handle, filter }) => {
-        if (!ctx.twitter) return { ok: false, error: "twitterapi not configured (PHOTON_TWITTERAPI_KEY missing)" };
+        if (!ctx.twitter) return { ok: false, error: "twitterapi not configured (KODAMA_TWITTERAPI_KEY missing)" };
         const user = await ctx.twitter.getUserByUsername(normalizeHandle(handle));
         if (!user) return { ok: false, error: `no user @${handle} on x` };
         upsertWatch(ctx.store, { handle: user.userName, user_id: user.id, filter });
@@ -163,7 +163,7 @@ export function buildMindTools(ctx: ToolContext) {
     }),
 
     x_list_watches: tool({
-      description: "List all X/Twitter handles photon is currently watching.",
+      description: "List all X/Twitter handles kodama is currently watching.",
       inputSchema: z.object({}),
       execute: async () => {
         const rows = listWatches(ctx.store);

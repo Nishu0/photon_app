@@ -1,10 +1,10 @@
 import { Spectrum } from "spectrum-ts";
 import { imessage } from "spectrum-ts/providers/imessage";
-import type { PhotonSettings } from "../settings";
+import type { KodamaSettings } from "../settings";
 
-export type PhotonApp = Awaited<ReturnType<typeof buildApp>>;
+export type KodamaApp = Awaited<ReturnType<typeof buildApp>>;
 
-export async function buildApp(settings: PhotonSettings) {
+export async function buildApp(settings: KodamaSettings) {
   if (settings.mode === "cloud") {
     if (!settings.projectId || !settings.projectSecret) {
       throw new Error("cloud mode requires projectId + projectSecret in settings");

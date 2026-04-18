@@ -1,6 +1,6 @@
 import { MessageScheduler, IMessageSDK } from "@photon-ai/imessage-kit";
 import type { Reminder, RecurrenceInterval } from "@photon-ai/imessage-kit";
-import type { PhotonSettings } from "../settings";
+import type { KodamaSettings } from "../settings";
 
 export interface ScheduledOutbound {
   id: string;
@@ -24,7 +24,7 @@ export class DelayedMessenger {
   private readonly sentContent = new Map<string, number>();
   private readonly sentTtlMs = 180_000;
 
-  constructor(settings: PhotonSettings) {
+  constructor(settings: KodamaSettings) {
     this.sdk = new IMessageSDK({
       debug: false,
       watcher: {

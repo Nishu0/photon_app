@@ -26,7 +26,7 @@ CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status, due_at);
 CREATE TABLE IF NOT EXISTS threads (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   stamp INTEGER NOT NULL,
-  author TEXT NOT NULL CHECK (author IN ('owner', 'photon')),
+  author TEXT NOT NULL CHECK (author IN ('owner', 'kodama', 'photon')),
   body TEXT NOT NULL,
   attached INTEGER NOT NULL DEFAULT 0,
   ref_message_id TEXT

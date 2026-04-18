@@ -5,7 +5,7 @@ import { handleOwnerMessage } from "../mind/reply";
 import { remember, seenBefore } from "../store/dedupe";
 import { nextOccurrenceOf } from "../clock";
 import type { Store } from "../store/open";
-import type { PhotonSettings } from "../settings";
+import type { KodamaSettings } from "../settings";
 import { LocalWatcher, type LocalInbound } from "../transport/localWatch";
 import { TwitterApi } from "../integrations/twitterapi";
 import { startDigestLoop, type DigestDeps } from "./digest";
@@ -14,12 +14,12 @@ export interface DaemonHandles {
   stop(): Promise<void>;
 }
 
-export async function startDaemon(store: Store, settings: PhotonSettings): Promise<DaemonHandles> {
+export async function startDaemon(store: Store, settings: KodamaSettings): Promise<DaemonHandles> {
   const delayed = new DelayedMessenger(settings);
   delayed.start();
   seedDailyCheckins(settings, delayed);
 
-  const twitterKey = process.env.PHOTON_TWITTERAPI_KEY?.trim() ?? "";
+  const twitterKey = (process.env.KODAMA_TWITTERAPI_KEY?.trim() || process.env.PHOTON_TWITTERAPI_KEY?.trim()) ?? "";
   const twitter = twitterKey ? new TwitterApi(twitterKey) : undefined;
   const digestDeps: DigestDeps | undefined = twitter
     ? { store, settings, delayed, twitter }
@@ -27,7 +27,7 @@ export async function startDaemon(store: Store, settings: PhotonSettings): Promi
   const digest = digestDeps ? startDigestLoop(digestDeps) : null;
 
   if (!twitter) {
-    console.log("[daemon] PHOTON_TWITTERAPI_KEY not set — x watch features disabled");
+    console.log("[daemon] KODAMA_TWITTERAPI_KEY not set — x watch features disabled");
   } else {
     console.log("[daemon] x digest loop started (5h interval)");
   }
@@ -48,7 +48,7 @@ interface Runtime {
 
 async function startLocal(
   store: Store,
-  settings: PhotonSettings,
+  settings: KodamaSettings,
   delayed: DelayedMessenger,
   runtime: Runtime
 ): Promise<DaemonHandles> {
@@ -110,7 +110,7 @@ async function startLocal(
 
 async function startCloud(
   store: Store,
-  settings: PhotonSettings,
+  settings: KodamaSettings,
   delayed: DelayedMessenger,
   runtime: Runtime
 ): Promise<DaemonHandles> {
@@ -143,7 +143,9 @@ async function startCloud(
               messageId: message.id,
               messageText: body,
               delayed,
-              spectrumMessage: message
+              spectrumMessage: message,
+              twitter: runtime.twitter,
+              digestDeps: runtime.digestDeps
             })
           );
         })
@@ -157,6 +159,7 @@ async function startCloud(
 
   return {
     async stop() {
+      runtime.digest?.stop();
       await app.stop();
       await delayed.drain();
       await messageLoop.catch(() => void 0);
@@ -164,7 +167,7 @@ async function startCloud(
   };
 }
 
-function seedDailyCheckins(settings: PhotonSettings, delayed: DelayedMessenger) {
+function seedDailyCheckins(settings: KodamaSettings, delayed: DelayedMessenger) {
   const { cadence, timezone, owner_handle } = settings;
   const plans: Array<{ slot: keyof typeof cadence; prompt: string }> = [
     { slot: "morning", prompt: "morning. whats on your mind today and what would make today feel good?" },
@@ -175,7 +178,7 @@ function seedDailyCheckins(settings: PhotonSettings, delayed: DelayedMessenger) 
   const now = new Date();
   for (const { slot, prompt } of plans) {
     const at = nextOccurrenceOf(cadence[slot], timezone, now);
-    const id = `photon.checkin.${slot}`;
+    const id = `kodama.checkin.${slot}`;
     try {
       delayed.scheduleRepeat(prompt, at, "daily", id);
       console.log(`[daemon] scheduled ${slot} -> ${at.toISOString()} (to=${owner_handle})`);

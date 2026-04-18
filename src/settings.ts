@@ -1,7 +1,7 @@
 import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { locations } from "./locations";
 
-export interface PhotonSettings {
+export interface KodamaSettings {
   revision: 1;
   model: string;
   openrouter_api_key: string;
@@ -31,7 +31,7 @@ export interface GmailReadPolicy {
   subjectDenyPatterns: string[];
 }
 
-export const defaultSettings: PhotonSettings = {
+export const defaultSettings: KodamaSettings = {
   revision: 1,
   model: "anthropic/claude-sonnet-4",
   openrouter_api_key: "",
@@ -68,29 +68,29 @@ export const defaultSettings: PhotonSettings = {
   }
 };
 
-export function loadSettings(): PhotonSettings {
+export function loadSettings(): KodamaSettings {
   if (!existsSync(locations.settings)) {
-    throw new Error(`No settings at ${locations.settings}. Run: photon setup`);
+    throw new Error(`No settings at ${locations.settings}. Run: kodama setup`);
   }
 
-  const parsed = JSON.parse(readFileSync(locations.settings, "utf8")) as Partial<PhotonSettings>;
+  const parsed = JSON.parse(readFileSync(locations.settings, "utf8")) as Partial<KodamaSettings>;
   const merged = mergeWithDefaults(parsed);
   assertReady(merged);
   return merged;
 }
 
-export function persistSettings(settings: PhotonSettings): void {
+export function persistSettings(settings: KodamaSettings): void {
   writeFileSync(locations.settings, `${JSON.stringify(settings, null, 2)}\n`, "utf8");
   chmodSync(locations.settings, 0o600);
 }
 
-export function readSettingsOrDefault(): PhotonSettings {
+export function readSettingsOrDefault(): KodamaSettings {
   if (!existsSync(locations.settings)) return structuredClone(defaultSettings);
-  const parsed = JSON.parse(readFileSync(locations.settings, "utf8")) as Partial<PhotonSettings>;
+  const parsed = JSON.parse(readFileSync(locations.settings, "utf8")) as Partial<KodamaSettings>;
   return mergeWithDefaults(parsed);
 }
 
-function mergeWithDefaults(partial: Partial<PhotonSettings>): PhotonSettings {
+function mergeWithDefaults(partial: Partial<KodamaSettings>): KodamaSettings {
   return {
     ...defaultSettings,
     ...partial,
@@ -103,7 +103,7 @@ function mergeWithDefaults(partial: Partial<PhotonSettings>): PhotonSettings {
   };
 }
 
-function assertReady(settings: PhotonSettings): void {
+function assertReady(settings: KodamaSettings): void {
   if (!settings.openrouter_api_key) throw new Error("openrouter_api_key required in settings");
   if (!settings.owner_handle) throw new Error("owner_handle required in settings");
   if (!settings.timezone) throw new Error("timezone required in settings");

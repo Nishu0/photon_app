@@ -33,7 +33,7 @@ export interface AdvancedSearchResult {
 
 export class TwitterApi {
   constructor(private readonly apiKey: string) {
-    if (!apiKey) throw new Error("twitterapi.io key missing (set PHOTON_TWITTERAPI_KEY)");
+    if (!apiKey) throw new Error("twitterapi.io key missing (set KODAMA_TWITTERAPI_KEY)");
   }
 
   async getUserByUsername(userName: string): Promise<TwitterUser | null> {

@@ -1,10 +1,10 @@
 import type { Store } from "../store/open";
-import type { PhotonSettings } from "../settings";
+import type { KodamaSettings } from "../settings";
 import { averageMoodSince, fetchJournalSince } from "../store/journal";
 import { listOpenTasks } from "../store/tasks";
 import { humanStamp } from "../clock";
 
-export function buildRecap(store: Store, settings: PhotonSettings, now: Date): string {
+export function buildRecap(store: Store, settings: KodamaSettings, now: Date): string {
   const weekAgo = now.getTime() - 7 * 24 * 60 * 60 * 1000;
   const entries = fetchJournalSince(store, weekAgo, 50);
   const mood = averageMoodSince(store, weekAgo);

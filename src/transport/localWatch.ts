@@ -19,7 +19,7 @@ export interface LocalWatcherOptions {
 
 /**
  * Thin wrapper over IMessageSDK.startWatching that accepts self-thread
- * messages (is_from_me=1) and dedups photon's own echoes via guid.
+ * messages (is_from_me=1) and dedups kodama's own echoes via guid.
  * The SDK is constructed with watcher.excludeOwnMessages=false (see
  * DelayedMessenger) so the watcher delivers our own messages.
  */

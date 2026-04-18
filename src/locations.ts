@@ -2,20 +2,20 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { mkdirSync } from "node:fs";
 
-const home = join(homedir(), ".photon");
+const home = join(homedir(), ".kodama");
 const launchAgents = join(homedir(), "Library", "LaunchAgents");
 
 export const locations = {
   home,
-  db: join(home, "photon.db"),
+  db: join(home, "kodama.db"),
   settings: join(home, "settings.json"),
-  pid: join(home, "photon.pid"),
+  pid: join(home, "kodama.pid"),
   logs: join(home, "logs"),
   attachments: join(home, "inbox"),
   scheduler: join(home, "scheduler.json"),
   launchAgents,
-  plistLocal: join(home, "photon.agent.plist"),
-  plistInstalled: join(launchAgents, "codes.photon.agent.plist")
+  plistLocal: join(home, "kodama.agent.plist"),
+  plistInstalled: join(launchAgents, "codes.kodama.agent.plist")
 };
 
 export function ensureHomeTree(): void {

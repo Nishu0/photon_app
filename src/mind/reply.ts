@@ -1,20 +1,20 @@
 import { generateText, stepCountIs } from "ai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import type { Message } from "spectrum-ts";
-import type { PhotonSettings } from "../settings";
+import type { KodamaSettings } from "../settings";
 import type { Store } from "../store/open";
 import { writeThread } from "../store/threads";
 import { acknowledge, pickReactionFor } from "../spectrum/reactions";
 import { buildMindTools, type ToolContext } from "./tools";
 import { classifyIntent } from "./understand";
-import { photonPersona } from "./persona";
+import { kodamaPersona } from "./persona";
 import type { DelayedMessenger } from "../spectrum/scheduler";
 import type { TwitterApi } from "../integrations/twitterapi";
 import type { DigestDeps } from "../agent/digest";
 
 export interface ReplyInput {
   store: Store;
-  settings: PhotonSettings;
+  settings: KodamaSettings;
   messageId: string;
   messageText: string;
   delayed: DelayedMessenger;
@@ -60,7 +60,7 @@ export async function handleOwnerMessage(input: ReplyInput): Promise<void> {
   const activeTools = pickActiveTools(intent.surface);
 
   const system = [
-    photonPersona,
+    kodamaPersona,
     `current classifier read: surface=${intent.surface} capture_requested=${intent.capture_requested} rationale=${intent.rationale}`,
     "first call snapshot if you need context about the owner's week; otherwise skip it and go straight to reply.",
     "if capture_requested=true, call log_journal exactly once before replying.",
@@ -93,7 +93,7 @@ export async function handleOwnerMessage(input: ReplyInput): Promise<void> {
   }
 
   const replyBody = trimmed.slice(0, 420);
-  writeThread(store, { author: "photon", body: replyBody, refMessageId: messageId });
+  writeThread(store, { author: "kodama", body: replyBody, refMessageId: messageId });
   await delayed.sendNow(replyBody);
 }
 

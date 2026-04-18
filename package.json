@@ -1,5 +1,5 @@
 {
-  "name": "photon",
+  "name": "kodama",
   "module": "src/cli.ts",
   "type": "module",
   "private": true,

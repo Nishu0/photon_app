@@ -32,48 +32,53 @@ if (!fn) {
 }
 
 function printHelp() {
-  console.log(`photon — iMessage journaling + tasks agent.
+  console.log(`kodama — iMessage journaling + tasks agent.
 
 usage:
-  photon setup           write ~/.photon/settings.json (interactive, reads .env as defaults)
-  photon install         install + load the launchd agent so photon boots with your Mac
-  photon serve           run the daemon in this terminal (foreground)
-  photon status          show daemon + launchd state
-  photon diagnose        run permission + connectivity checks
-  photon sleep           stop the daemon + unload launchd
-  photon purge           unload agent and delete ~/.photon
-  photon recap           print a recap of the current week
-  photon policy:check    run the Gmail read policy against a sample payload`);
+  kodama setup           write ~/.kodama/settings.json (interactive, reads .env as defaults)
+  kodama install         install + load the launchd agent so kodama boots with your Mac
+  kodama serve           run the daemon in this terminal (foreground)
+  kodama status          show daemon + launchd state
+  kodama diagnose        run permission + connectivity checks
+  kodama sleep           stop the daemon + unload launchd
+  kodama purge           unload agent and delete ~/.kodama
+  kodama recap           print a recap of the current week
+  kodama policy:check    run the Gmail read policy against a sample payload`);
 }
 
 function setup(): void {
   ensureHomeTree();
   const existing = readSettingsOrDefault();
-  const env = (key: string) => (process.env[key]?.trim() ? process.env[key]!.trim() : undefined);
+  const env = (key: string) => {
+    const kodamaKey = `KODAMA_${key}`;
+    const photonKey = `PHOTON_${key}`;
+    const raw = process.env[kodamaKey]?.trim() || process.env[photonKey]?.trim();
+    return raw && raw.length > 0 ? raw : undefined;
+  };
 
   const owner_handle = ask(
     "iMessage handle (phone or email of the owner)",
-    env("PHOTON_OWNER_HANDLE") ?? existing.owner_handle
+    env("OWNER_HANDLE") ?? existing.owner_handle
   );
   const openrouter_api_key = ask(
     "OpenRouter API key",
-    env("PHOTON_OPENROUTER_KEY") ?? existing.openrouter_api_key
+    env("OPENROUTER_KEY") ?? existing.openrouter_api_key
   );
-  const model = ask("Model", env("PHOTON_MODEL") ?? existing.model ?? defaultSettings.model);
-  const timezone = ask("Timezone", env("PHOTON_TIMEZONE") ?? existing.timezone);
-  const modeRaw = ask("Mode (local|cloud)", env("PHOTON_MODE") ?? existing.mode);
+  const model = ask("Model", env("MODEL") ?? existing.model ?? defaultSettings.model);
+  const timezone = ask("Timezone", env("TIMEZONE") ?? existing.timezone);
+  const modeRaw = ask("Mode (local|cloud)", env("MODE") ?? existing.mode);
   const mode: "local" | "cloud" = modeRaw === "cloud" ? "cloud" : "local";
 
-  let projectId = env("PHOTON_PROJECT_ID") ?? existing.projectId ?? "";
-  let projectSecret = env("PHOTON_PROJECT_SECRET") ?? existing.projectSecret ?? "";
+  let projectId = env("PROJECT_ID") ?? existing.projectId ?? "";
+  let projectSecret = env("PROJECT_SECRET") ?? existing.projectSecret ?? "";
   if (mode === "cloud") {
     projectId = ask("Spectrum projectId", projectId);
     projectSecret = ask("Spectrum projectSecret", projectSecret);
   }
 
-  const cadenceMorning = ask("Morning check-in (HH:MM)", env("PHOTON_CADENCE_MORNING") ?? existing.cadence.morning);
-  const cadenceAfternoon = ask("Afternoon check-in (HH:MM)", env("PHOTON_CADENCE_AFTERNOON") ?? existing.cadence.afternoon);
-  const cadenceEvening = ask("Evening check-in (HH:MM)", env("PHOTON_CADENCE_EVENING") ?? existing.cadence.evening);
+  const cadenceMorning = ask("Morning check-in (HH:MM)", env("CADENCE_MORNING") ?? existing.cadence.morning);
+  const cadenceAfternoon = ask("Afternoon check-in (HH:MM)", env("CADENCE_AFTERNOON") ?? existing.cadence.afternoon);
+  const cadenceEvening = ask("Evening check-in (HH:MM)", env("CADENCE_EVENING") ?? existing.cadence.evening);
 
   const next = {
     ...existing,
@@ -92,19 +97,19 @@ function setup(): void {
 
   console.log(`settings: ${locations.settings}`);
   console.log(`db:       ${locations.db}`);
-  console.log("photon is configured. next:");
-  console.log("  photon serve      run in this terminal");
-  console.log("  photon install    load launchd agent so it boots with your Mac");
+  console.log("kodama is configured. next:");
+  console.log("  kodama serve      run in this terminal");
+  console.log("  kodama install    load launchd agent so it boots with your Mac");
 }
 
 function install(): void {
   if (!existsSync(locations.settings)) {
-    console.error("no settings found. run: photon setup");
+    console.error("no settings found. run: kodama setup");
     process.exit(1);
   }
   installAgent();
   console.log(`launchd:  ${locations.plistInstalled} (loaded)`);
-  console.log("photon will now run in the background and start with your Mac.");
+  console.log("kodama will now run in the background and start with your Mac.");
 }
 
 async function serve(): Promise<void> {
@@ -112,7 +117,7 @@ async function serve(): Promise<void> {
 
   const pid = readLivePid();
   if (pid && pid !== process.pid) {
-    console.log(`photon already running (pid ${pid})`);
+    console.log(`kodama already running (pid ${pid})`);
     return;
   }
 
@@ -121,10 +126,10 @@ async function serve(): Promise<void> {
   writeFileSync(locations.pid, `${process.pid}\n`, "utf8");
 
   const handles = await startDaemon(store, settings);
-  console.log("photon daemon online");
+  console.log("kodama daemon online");
 
   const shutdown = async () => {
-    console.log("photon shutting down...");
+    console.log("kodama shutting down...");
     try {
       await handles.stop();
     } finally {
@@ -158,7 +163,7 @@ function status(): void {
 }
 
 async function diagnose(): Promise<void> {
-  console.log("photon diagnose");
+  console.log("kodama diagnose");
   let ok = 0;
   let bad = 0;
 
@@ -191,12 +196,12 @@ function stopDaemon(): void {
   const pid = readLivePid();
   if (!pid) {
     if (existsSync(locations.pid)) unlinkSync(locations.pid);
-    console.log("photon is already asleep");
+    console.log("kodama is already asleep");
     return;
   }
   try {
     process.kill(pid, "SIGTERM");
-    console.log(`sent SIGTERM to photon (pid ${pid})`);
+    console.log(`sent SIGTERM to kodama (pid ${pid})`);
   } catch {
     console.log(`could not reach pid ${pid}`);
   }

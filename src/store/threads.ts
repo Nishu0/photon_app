@@ -1,6 +1,6 @@
 import type { Store } from "./open";
 
-export type ThreadAuthor = "owner" | "photon";
+export type ThreadAuthor = "owner" | "kodama" | "photon";
 
 export interface ThreadRow {
   id: number;

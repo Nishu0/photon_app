@@ -1,7 +1,7 @@
 import { generateObject } from "ai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { z } from "zod";
-import type { PhotonSettings } from "../settings";
+import type { KodamaSettings } from "../settings";
 
 const intentSchema = z.object({
   surface: z.enum(["journal", "task", "checkin_reply", "question", "smalltalk", "x_watch", "unclear"]),
@@ -28,7 +28,7 @@ Rules:
 - reply_needed is true when a written reply actually helps
 - confidence is how sure you are, not how emphatic the message is`;
 
-export async function classifyIntent(settings: PhotonSettings, text: string): Promise<Intent> {
+export async function classifyIntent(settings: KodamaSettings, text: string): Promise<Intent> {
   const provider = createOpenRouter({ apiKey: settings.openrouter_api_key });
 
   try {
