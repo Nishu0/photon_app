@@ -7,12 +7,17 @@ import { completeTask, createTask, dropTask, listOpenTasks, snoozeTask } from ".
 import { stash } from "../store/keyring";
 import { tailThread } from "../store/threads";
 import { humanStamp } from "../clock";
+import { TwitterApi } from "../integrations/twitterapi";
+import { deleteWatch, listWatches, upsertWatch, normalizeHandle } from "../store/watches";
+import { runDigestOnce, type DigestDeps } from "../agent/digest";
 
 export interface ToolContext {
   store: Store;
   settings: PhotonSettings;
   now: Date;
   scheduleReminder: (body: string, at: Date) => Promise<string>;
+  twitter?: TwitterApi;
+  digestDeps?: DigestDeps;
 }
 
 export function buildMindTools(ctx: ToolContext) {
@@ -118,6 +123,72 @@ export function buildMindTools(ctx: ToolContext) {
       execute: async ({ body, when_iso }) => {
         const id = await ctx.scheduleReminder(body, new Date(when_iso));
         return { ok: true, id };
+      }
+    }),
+
+    x_watch_user: tool({
+      description:
+        "Verify an X/Twitter handle and start watching them. Call whenever the owner asks to watch, follow, or track someone's posts. The filter is a free-form description of what matters — jobs, funding news, web3, etc. Ask the owner what they care about if they did not say.",
+      inputSchema: z.object({
+        handle: z.string().min(1).max(60).describe("X username without the @"),
+        filter: z
+          .string()
+          .min(1)
+          .max(300)
+          .describe("what kinds of posts the owner wants summarized (e.g. 'web3 job posts', 'funding rounds')")
+      }),
+      execute: async ({ handle, filter }) => {
+        if (!ctx.twitter) return { ok: false, error: "twitterapi not configured (PHOTON_TWITTERAPI_KEY missing)" };
+        const user = await ctx.twitter.getUserByUsername(normalizeHandle(handle));
+        if (!user) return { ok: false, error: `no user @${handle} on x` };
+        upsertWatch(ctx.store, { handle: user.userName, user_id: user.id, filter });
+        return {
+          ok: true,
+          handle: user.userName,
+          name: user.name,
+          followers: user.followers,
+          bio: user.description?.slice(0, 200),
+          filter
+        };
+      }
+    }),
+
+    x_unwatch_user: tool({
+      description: "Stop watching an X/Twitter handle.",
+      inputSchema: z.object({ handle: z.string().min(1).max(60) }),
+      execute: async ({ handle }) => {
+        const removed = deleteWatch(ctx.store, handle);
+        return { ok: removed, handle: normalizeHandle(handle) };
+      }
+    }),
+
+    x_list_watches: tool({
+      description: "List all X/Twitter handles photon is currently watching.",
+      inputSchema: z.object({}),
+      execute: async () => {
+        const rows = listWatches(ctx.store);
+        if (rows.length === 0) return { watches: [] };
+        return {
+          watches: rows.map((r) => ({
+            handle: r.handle,
+            filter: r.filter,
+            last_checked_at: r.last_checked_at
+              ? humanStamp(new Date(r.last_checked_at), ctx.settings.timezone)
+              : "never"
+          }))
+        };
+      }
+    }),
+
+    x_digest_now: tool({
+      description:
+        "Run the X digest loop immediately across all watched handles and return what was found. Use when the owner asks for an update now rather than waiting for the 5h cron.",
+      inputSchema: z.object({}),
+      execute: async () => {
+        if (!ctx.digestDeps) return { ok: false, error: "digest not available in this context" };
+        const results = await runDigestOnce(ctx.digestDeps);
+        if (results.length === 0) return { ok: true, note: "no watches configured yet" };
+        return { ok: true, results };
       }
     })
   };

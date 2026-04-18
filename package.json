@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@openrouter/ai-sdk-provider": "^2.5.1",
-    "@photon-ai/imessage-kit": "^3.0.0-rc.2",
+    "@photon-ai/imessage-kit": "2.1.2",
     "ai": "^6.0.156",
     "spectrum-ts": "^0.4.0",
     "zod": "^3.25.67"

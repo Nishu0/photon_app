@@ -59,3 +59,14 @@ CREATE TABLE IF NOT EXISTS sent_checkins (
   token TEXT PRIMARY KEY,
   stamp INTEGER NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS x_watches (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  handle TEXT NOT NULL UNIQUE,
+  user_id TEXT,
+  filter TEXT,
+  created_at INTEGER NOT NULL,
+  last_checked_at INTEGER NOT NULL DEFAULT 0,
+  last_seen_tweet_id TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_x_watches_last ON x_watches(last_checked_at);

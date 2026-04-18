@@ -1,7 +1,6 @@
 import { generateText, stepCountIs } from "ai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import type { Message } from "spectrum-ts";
-import { text as spectrumText } from "spectrum-ts";
 import type { PhotonSettings } from "../settings";
 import type { Store } from "../store/open";
 import { writeThread } from "../store/threads";
@@ -10,32 +9,39 @@ import { buildMindTools, type ToolContext } from "./tools";
 import { classifyIntent } from "./understand";
 import { photonPersona } from "./persona";
 import type { DelayedMessenger } from "../spectrum/scheduler";
+import type { TwitterApi } from "../integrations/twitterapi";
+import type { DigestDeps } from "../agent/digest";
 
 export interface ReplyInput {
   store: Store;
   settings: PhotonSettings;
-  message: Message;
+  messageId: string;
   messageText: string;
   delayed: DelayedMessenger;
+  spectrumMessage?: Message;
+  twitter?: TwitterApi;
+  digestDeps?: DigestDeps;
 }
 
 export async function handleOwnerMessage(input: ReplyInput): Promise<void> {
-  const { store, settings, message, messageText, delayed } = input;
+  const { store, settings, messageId, messageText, delayed, spectrumMessage, twitter, digestDeps } = input;
 
-  writeThread(store, { author: "owner", body: messageText, refMessageId: message.id });
+  writeThread(store, { author: "owner", body: messageText, refMessageId: messageId });
 
   const intent = await classifyIntent(settings, messageText);
   console.log(
     `[mind] surface=${intent.surface} capture=${intent.capture_requested} reactionOnly=${intent.reaction_only} conf=${intent.confidence.toFixed(2)}`
   );
 
-  if (intent.reaction_only) {
-    await acknowledge(message, intent.reaction ? intent.reaction : pickReactionFor("logged"));
+  const canReact = Boolean(spectrumMessage) && settings.mode === "cloud";
+
+  if (intent.reaction_only && canReact) {
+    await acknowledge(spectrumMessage!, intent.reaction ? intent.reaction : pickReactionFor("logged"));
     return;
   }
 
-  if (!intent.reply_needed) {
-    await acknowledge(message, intent.reaction ?? "like");
+  if (!intent.reply_needed && canReact) {
+    await acknowledge(spectrumMessage!, intent.reaction ?? "like");
     return;
   }
 
@@ -44,7 +50,9 @@ export async function handleOwnerMessage(input: ReplyInput): Promise<void> {
     store,
     settings,
     now: new Date(),
-    scheduleReminder: async (body, at) => delayed.scheduleOnce(body, at)
+    scheduleReminder: async (body, at) => delayed.scheduleOnce(body, at),
+    twitter,
+    digestDeps
   };
 
   const tools = buildMindTools(toolCtx);
@@ -71,22 +79,37 @@ export async function handleOwnerMessage(input: ReplyInput): Promise<void> {
 
   const trimmed = result.text.trim();
   if (trimmed.length === 0) {
-    await acknowledge(message, intent.reaction ?? "like");
+    if (canReact) {
+      await acknowledge(spectrumMessage!, intent.reaction ?? "like");
+    } else {
+      await delayed.sendNow("ok, logged.");
+    }
+    return;
+  }
+
+  if (normalizeForEcho(trimmed) === normalizeForEcho(messageText)) {
+    console.warn("[mind] model echoed input verbatim; skipping send");
     return;
   }
 
   const replyBody = trimmed.slice(0, 420);
-  writeThread(store, { author: "photon", body: replyBody, refMessageId: message.id });
-  await message.reply(spectrumText(replyBody));
+  writeThread(store, { author: "photon", body: replyBody, refMessageId: messageId });
+  await delayed.sendNow(replyBody);
+}
+
+function normalizeForEcho(s: string): string {
+  return s.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
 type ToolName = ReturnType<typeof buildMindTools> extends infer T ? keyof T & string : never;
 
 function pickActiveTools(surface: string): ToolName[] {
   const core: ToolName[] = ["snapshot", "remember_keyring"];
+  const x: ToolName[] = ["x_watch_user", "x_unwatch_user", "x_list_watches", "x_digest_now"];
   if (surface === "journal") return [...core, "log_journal"];
   if (surface === "task") return [...core, "add_task", "complete_task", "snooze_task", "drop_task", "schedule_reminder"];
   if (surface === "checkin_reply") return [...core, "log_journal"];
-  if (surface === "question") return core;
-  return core;
+  if (surface === "x_watch") return [...core, ...x];
+  if (surface === "question") return [...core, ...x];
+  return [...core, ...x];
 }

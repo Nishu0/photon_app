@@ -11,37 +11,66 @@ export interface ScheduledOutbound {
 }
 
 /**
- * Wraps MessageScheduler with a fresh IMessageSDK instance. We deliberately
- * own a separate SDK here — Spectrum's local provider also owns one for the
- * watcher, but sends don't fight because each call uses its own AppleScript
- * dispatch. Cloud mode should not use this scheduler (scheduling is a local
- * activity); instead, use persistent state + a wake-up tick.
+ * Wraps MessageScheduler + IMessageSDK for one owner handle.
+ * In local mode the same SDK is shared with LocalWatcher so the watcher
+ * can see is_from_me=1 messages (for self-thread) while still filtering
+ * out our own echoes via sent-guid tracking.
  */
 export class DelayedMessenger {
-  private readonly sdk: IMessageSDK;
+  readonly sdk: IMessageSDK;
   private readonly scheduler: MessageScheduler;
   private readonly owner: string;
-  private started = false;
+  private readonly sentGuids = new Map<string, number>();
+  private readonly sentContent = new Map<string, number>();
+  private readonly sentTtlMs = 180_000;
 
   constructor(settings: PhotonSettings) {
-    this.sdk = new IMessageSDK({ debug: false });
+    this.sdk = new IMessageSDK({
+      debug: false,
+      watcher: {
+        excludeOwnMessages: settings.mode !== "local"
+      }
+    });
     this.owner = settings.owner_handle;
 
-    this.scheduler = new MessageScheduler({
-      sender: this.sdk,
-      tickInterval: 30_000,
-      events: {
-        onSent: (task) => console.log(`[scheduler] delivered ${task.id} at ${new Date().toISOString()}`),
+    this.scheduler = new MessageScheduler(
+      this.sdk,
+      { checkInterval: 30_000 },
+      {
+        onSent: (task, result) => {
+          const guid = result.message?.guid;
+          if (guid) this.sentGuids.set(guid, Date.now());
+          if (typeof task.content === "string") {
+            this.sentContent.set(normalizeContent(task.content), Date.now());
+          }
+          console.log(`[scheduler] delivered ${task.id} at ${new Date().toISOString()}`);
+        },
         onError: (task, err) => console.error(`[scheduler] send failed ${task.id}`, err),
         onComplete: (task) => console.log(`[scheduler] complete ${task.id}`)
       }
-    });
+    );
   }
 
-  start(): void {
-    if (this.started) return;
-    this.scheduler.start();
-    this.started = true;
+  start(): void {}
+
+  async sendNow(body: string): Promise<void> {
+    const key = normalizeContent(body);
+    this.sentContent.set(key, Date.now());
+    const result = await this.sdk.send(this.owner, body);
+    const guid = result.message?.guid;
+    if (guid) this.sentGuids.set(guid, Date.now());
+    this.sentContent.set(key, Date.now());
+    this.gcSent();
+  }
+
+  isRecentSentGuid(guid: string): boolean {
+    this.gcSent();
+    return this.sentGuids.has(guid);
+  }
+
+  isRecentEchoContent(text: string): boolean {
+    this.gcSent();
+    return this.sentContent.has(normalizeContent(text));
   }
 
   scheduleOnce(body: string, sendAt: Date, id?: string): string {
@@ -80,8 +109,21 @@ export class DelayedMessenger {
   async drain(): Promise<void> {
     this.scheduler.destroy();
     await this.sdk.close();
-    this.started = false;
   }
+
+  private gcSent(): void {
+    const threshold = Date.now() - this.sentTtlMs;
+    for (const [k, t] of this.sentGuids) {
+      if (t < threshold) this.sentGuids.delete(k);
+    }
+    for (const [k, t] of this.sentContent) {
+      if (t < threshold) this.sentContent.delete(k);
+    }
+  }
+}
+
+function normalizeContent(s: string): string {
+  return s.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
 export type { Reminder };
