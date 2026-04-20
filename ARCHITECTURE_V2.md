@@ -219,29 +219,31 @@ Check boxes as each piece lands. Feel free to re-scope.
 ### Parent agent (orchestrator)
 - [x] parent system prompt
 - [x] `dispatch_to_agent` tool definition
-- [x] sub-agent registry (`InMemoryRegistry`)
+- [x] sub-agent registry (`InMemoryRegistry` for mocks, `WiringRegistry` for prod)
 - [x] concrete `query()` runner (`src/v2/orchestrator/runAgent.ts`) with spend + turn caps
-- [ ] parent run loop that calls registry per dispatch + stitches final reply
+- [x] parent run loop (`runParent` in `parent.ts`) — dispatch_to_agent tool threads registry → sub-agent → result
+- [x] factory `buildRegistry(deps)` wiring memory/twitter/journal/tasks
 - [ ] session resume via `sessionId` (schema has the slot; wire after Convex dev is up)
 
 ### Sub-agents
 - [x] base factory (tool whitelist + memory adapter injection + spend cap)
 - [x] `memory` (save/recall/forget — real, backed by adapter)
+- [x] `twitter` (watch/unwatch/list/recent — wraps v1 store + twitterapi client)
+- [x] `journal` (log + recap — wraps v1 journal store)
+- [x] `tasks` (add/list/complete/snooze/drop/schedule_reminder — wraps v1 tasks store)
 - [ ] `email` (reuses v1 `judgeEmail` policy; needs OAuth)
-- [ ] `twitter` (lifts v1 tools + digest call)
 - [ ] `weather`
 - [ ] `youtube`
-- [ ] `journal`
-- [ ] `tasks`
 
 ### Nightly cleanup
 - [x] consolidator / adversary / judge prompts (`src/v2/nightly/prompts.ts`)
 - [x] types + pipeline (`src/v2/nightly/cleanup.ts`) with tests
 - [x] debate → judge flow (judge only runs on contested proposals)
 - [x] apply mutations through the adapter (prune / promote / merge paths)
-- [ ] wire actual Sonnet/Opus calls into `consolidate` / `adversary` / `judge` closures
+- [ ] wire actual Sonnet/Opus calls into `consolidate` / `adversary` / `judge` closures (entry + plist generator ready, stubs in place)
 - [ ] audit rows on `memoryEvents` (adapter writes them for accessed/promoted/pruned/merged; verify on real Convex)
-- [ ] cron at 03:00 local via launchd job separate from daemon
+- [x] launchd plist generator for nightly cron (`src/v2/nightly/plist.ts`) + entry stub (`src/v2/nightly/entry.ts`)
+- [ ] install job at 03:00 local (plist is generated; `kodama install --v2` command not yet wired)
 
 ### Guardrails
 - [x] per-agent spend cap config (`src/v2/guardrails/spend.ts`)
