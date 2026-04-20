@@ -9,6 +9,9 @@ import type { KodamaSettings } from "../settings";
 import { LocalWatcher, type LocalInbound } from "../transport/localWatch";
 import { TwitterApi } from "../integrations/twitterapi";
 import { startDigestLoop, type DigestDeps } from "./digest";
+import { handleOwnerMessageV2 } from "../v2/handler";
+
+const V2_ENABLED = process.env.KODAMA_V2 === "1";
 
 export interface DaemonHandles {
   stop(): Promise<void>;
@@ -18,6 +21,8 @@ export async function startDaemon(store: Store, settings: KodamaSettings): Promi
   const delayed = new DelayedMessenger(settings);
   delayed.start();
   seedDailyCheckins(settings, delayed);
+
+  if (V2_ENABLED) console.log("[daemon] v2 pump enabled (KODAMA_V2=1)");
 
   const twitterKey = (process.env.KODAMA_TWITTERAPI_KEY?.trim() || process.env.PHOTON_TWITTERAPI_KEY?.trim()) ?? "";
   const twitter = twitterKey ? new TwitterApi(twitterKey) : undefined;
@@ -82,15 +87,24 @@ async function startLocal(
     const next = prior
       .catch(() => void 0)
       .then(() =>
-        handleOwnerMessage({
-          store,
-          settings,
-          messageId: msg.guid,
-          messageText: msg.text,
-          delayed,
-          twitter: runtime.twitter,
-          digestDeps: runtime.digestDeps
-        })
+        V2_ENABLED
+          ? handleOwnerMessageV2({
+              store,
+              settings,
+              messageId: msg.guid,
+              messageText: msg.text,
+              delayed,
+              twitter: runtime.twitter
+            })
+          : handleOwnerMessage({
+              store,
+              settings,
+              messageId: msg.guid,
+              messageText: msg.text,
+              delayed,
+              twitter: runtime.twitter,
+              digestDeps: runtime.digestDeps
+            })
       )
       .catch((err) => console.error("[daemon] handler failed", err))
       .finally(() => {
@@ -137,16 +151,25 @@ async function startCloud(
         .catch(() => void 0)
         .then(async () => {
           await app.responding(space, () =>
-            handleOwnerMessage({
-              store,
-              settings,
-              messageId: message.id,
-              messageText: body,
-              delayed,
-              spectrumMessage: message,
-              twitter: runtime.twitter,
-              digestDeps: runtime.digestDeps
-            })
+            V2_ENABLED
+              ? handleOwnerMessageV2({
+                  store,
+                  settings,
+                  messageId: message.id,
+                  messageText: body,
+                  delayed,
+                  twitter: runtime.twitter
+                })
+              : handleOwnerMessage({
+                  store,
+                  settings,
+                  messageId: message.id,
+                  messageText: body,
+                  delayed,
+                  spectrumMessage: message,
+                  twitter: runtime.twitter,
+                  digestDeps: runtime.digestDeps
+                })
           );
         })
         .catch((err) => console.error("[daemon] handler failed", err))

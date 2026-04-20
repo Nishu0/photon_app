@@ -252,7 +252,9 @@ Check boxes as each piece lands. Feel free to re-scope.
 - [ ] panic abort (two consecutive failures → short-circuit)
 
 ### Migration
-- [ ] `KODAMA_V2=1` env flag flips daemon pump
+- [x] `KODAMA_V2=1` env flag flips daemon pump (both local + cloud branches)
+- [x] in-memory memory adapter (`memoryAdapter.ts`) so v2 runs end-to-end before Convex boots
+- [x] `handleOwnerMessageV2` that mirrors v1's handler shape
 - [ ] sqlite→convex one-shot migration script for memories + journal + tasks
 - [ ] delete `src/` and rename `src/v2/` after stabilization
 
