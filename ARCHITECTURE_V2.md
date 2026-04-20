@@ -240,7 +240,7 @@ Check boxes as each piece lands. Feel free to re-scope.
 - [x] types + pipeline (`src/v2/nightly/cleanup.ts`) with tests
 - [x] debate → judge flow (judge only runs on contested proposals)
 - [x] apply mutations through the adapter (prune / promote / merge paths)
-- [ ] wire actual Sonnet/Opus calls into `consolidate` / `adversary` / `judge` closures (entry + plist generator ready, stubs in place)
+- [x] wire actual Sonnet/Opus calls into `consolidate` / `adversary` / `judge` closures (`src/v2/nightly/agents.ts` via `@anthropic-ai/sdk`)
 - [ ] audit rows on `memoryEvents` (adapter writes them for accessed/promoted/pruned/merged; verify on real Convex)
 - [x] launchd plist generator for nightly cron (`src/v2/nightly/plist.ts`) + entry stub (`src/v2/nightly/entry.ts`)
 - [ ] install job at 03:00 local (plist is generated; `kodama install --v2` command not yet wired)

@@ -1,46 +1,37 @@
+import Anthropic from "@anthropic-ai/sdk";
 import { loadSettings } from "../../settings";
 import { openStore } from "../../store/open";
 import { runNightlyCleanup } from "./cleanup";
-import type {
-  AdversaryResponse,
-  ConsolidatorProposal,
-  JudgeVerdict,
-  MemorySummary
-} from "./types";
+import { makeAllClosures } from "./agents";
+import { makeInMemoryAdapter } from "../memory/memoryAdapter";
 
-/**
- * Entry point for the nightly cleanup launchd job.
- *
- * NOTE: the Sonnet/Opus calls for consolidator/adversary/judge are stubbed
- * below — they'll be wired once Convex dev is running and we've picked a
- * classifier model. For now the job does nothing; it exists so the launchd
- * plist has a target.
- */
 export async function main(): Promise<void> {
   const settings = loadSettings();
   using store = openStore();
   void store;
-  void settings;
 
-  const consolidate = async (_memories: MemorySummary[]): Promise<ConsolidatorProposal[]> => [];
-  const adversary = async (
-    _memories: MemorySummary[],
-    _proposals: ConsolidatorProposal[]
-  ): Promise<AdversaryResponse[]> => [];
-  const judge = async (
-    _memories: MemorySummary[],
-    _proposals: ConsolidatorProposal[],
-    _adversary: AdversaryResponse[]
-  ): Promise<JudgeVerdict[]> => [];
+  const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
+  if (!apiKey) {
+    console.log("[nightly] skipped: ANTHROPIC_API_KEY not set");
+    return;
+  }
 
-  // The adapter injection is deferred to when Convex dev is up. Once that
-  // lands, swap the console.log for a real runNightlyCleanup call.
-  void runNightlyCleanup;
-  void consolidate;
-  void adversary;
-  void judge;
+  // TODO: swap this for the Convex-backed adapter once `bunx convex dev` is
+  // running and `convex/_generated/api.js` exists.
+  const adapter = makeInMemoryAdapter();
 
-  console.log("[nightly] skipped: memory adapter not yet wired to convex");
+  const client = new Anthropic({ apiKey });
+  const closures = makeAllClosures({ client });
+
+  const result = await runNightlyCleanup({
+    adapter,
+    userId: settings.owner_handle,
+    ...closures
+  });
+
+  console.log(
+    `[nightly] done total=${result.totalMemories} contested=${result.contested} keep=${result.applied.keep} promote=${result.applied.promote} merge=${result.applied.merge} prune=${result.applied.prune}`
+  );
 }
 
 if (import.meta.main) {
