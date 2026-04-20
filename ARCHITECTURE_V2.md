@@ -210,35 +210,37 @@ Check boxes as each piece lands. Feel free to re-scope.
 ### Memory system
 - [x] 7 segments + defaults (`src/v2/memory/segments.ts`)
 - [x] decay math (`src/v2/memory/decay.ts`) with tests
-- [ ] memory adapter over Convex (`src/v2/memory/adapter.ts`)
-- [ ] segment classifier (small Sonnet call on save)
-- [ ] bucket promotion rules (access count × importance thresholds)
-- [ ] memory_recall, memory_save, memory_forget tools
+- [x] memory adapter over Convex (`src/v2/memory/adapter.ts`)
+- [x] Convex mutations/queries (`convex/memories.ts`: create, touch, promote, prune, merge, list*)
+- [x] rule-based segment classifier with tests (`src/v2/memory/classifier.ts`) — LLM classifier can slot in later
+- [x] bucket promotion rules baked into `nextBucketOnAccess` + `judge`
+- [x] memory_recall, memory_save, memory_forget tools (via `buildMemoryAgent`)
 
 ### Parent agent (orchestrator)
 - [x] parent system prompt
 - [x] `dispatch_to_agent` tool definition
-- [ ] sub-agent registry (name → factory)
-- [ ] run loop: parent → sub-agent → stitched reply
-- [ ] spend interceptor on the `query()` stream
-- [ ] session resume via `sessionId`
+- [x] sub-agent registry (`InMemoryRegistry`)
+- [x] concrete `query()` runner (`src/v2/orchestrator/runAgent.ts`) with spend + turn caps
+- [ ] parent run loop that calls registry per dispatch + stitches final reply
+- [ ] session resume via `sessionId` (schema has the slot; wire after Convex dev is up)
 
 ### Sub-agents
 - [x] base factory (tool whitelist + memory adapter injection + spend cap)
-- [ ] `email` (reuses v1 `judgeEmail` policy)
+- [x] `memory` (save/recall/forget — real, backed by adapter)
+- [ ] `email` (reuses v1 `judgeEmail` policy; needs OAuth)
 - [ ] `twitter` (lifts v1 tools + digest call)
 - [ ] `weather`
 - [ ] `youtube`
 - [ ] `journal`
 - [ ] `tasks`
-- [ ] `memory` (explicit save/recall/forget)
 
 ### Nightly cleanup
-- [ ] consolidator (Sonnet)
-- [ ] adversary (Sonnet)
-- [ ] debate loop (≤2 rounds)
-- [ ] judge (Opus)
-- [ ] apply mutations + `memoryEvents` audit rows
+- [x] consolidator / adversary / judge prompts (`src/v2/nightly/prompts.ts`)
+- [x] types + pipeline (`src/v2/nightly/cleanup.ts`) with tests
+- [x] debate → judge flow (judge only runs on contested proposals)
+- [x] apply mutations through the adapter (prune / promote / merge paths)
+- [ ] wire actual Sonnet/Opus calls into `consolidate` / `adversary` / `judge` closures
+- [ ] audit rows on `memoryEvents` (adapter writes them for accessed/promoted/pruned/merged; verify on real Convex)
 - [ ] cron at 03:00 local via launchd job separate from daemon
 
 ### Guardrails
