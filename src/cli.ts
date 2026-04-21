@@ -6,6 +6,11 @@ import { defaultSettings, loadSettings, persistSettings, readSettingsOrDefault }
 import { openStore } from "./store/open";
 import { startDaemon } from "./agent/daemon";
 import { agentLoaded, installAgent, removeAgent, unloadAgent } from "./automation/install";
+import {
+  installNightlyAgent,
+  nightlyAgentLoaded,
+  removeNightlyAgent
+} from "./v2/nightly/install";
 import { triage } from "./services/gmail/reader";
 import { buildRecap } from "./mind/recap";
 
@@ -14,6 +19,8 @@ const subcommand = Bun.argv[2] ?? "help";
 const dispatch: Record<string, () => void | Promise<void>> = {
   setup,
   install,
+  "install-nightly": installNightly,
+  "uninstall-nightly": uninstallNightly,
   serve,
   status,
   diagnose,
@@ -37,6 +44,8 @@ function printHelp() {
 usage:
   kodama setup           write ~/.kodama/settings.json (interactive, reads .env as defaults)
   kodama install         install + load the launchd agent so kodama boots with your Mac
+  kodama install-nightly install the 03:00 memory cleanup launchd job (v2)
+  kodama uninstall-nightly  unload + remove the nightly cleanup job
   kodama serve           run the daemon in this terminal (foreground)
   kodama status          show daemon + launchd state
   kodama diagnose        run permission + connectivity checks
@@ -112,6 +121,25 @@ function install(): void {
   console.log("kodama will now run in the background and start with your Mac.");
 }
 
+function installNightly(): void {
+  if (!existsSync(locations.settings)) {
+    console.error("no settings found. run: kodama setup");
+    process.exit(1);
+  }
+  if (!process.env.ANTHROPIC_API_KEY?.trim()) {
+    console.log("warning: ANTHROPIC_API_KEY is not set — nightly job will skip until you add it.");
+  }
+  ensureHomeTree();
+  installNightlyAgent();
+  console.log(`launchd:  ${locations.plistNightlyInstalled} (loaded)`);
+  console.log("nightly memory cleanup scheduled for 03:00 local time.");
+}
+
+function uninstallNightly(): void {
+  removeNightlyAgent();
+  console.log(`removed:  ${locations.plistNightlyInstalled}`);
+}
+
 async function serve(): Promise<void> {
   ensureHomeTree();
 
@@ -147,6 +175,7 @@ function status(): void {
   const pid = readLivePid();
   console.log(`daemon:    ${pid ? `running (pid ${pid})` : "stopped"}`);
   console.log(`launchd:   ${agentLoaded() ? "loaded" : "not loaded"}`);
+  console.log(`nightly:   ${nightlyAgentLoaded() ? "loaded (03:00)" : "not loaded"}`);
   console.log(`settings:  ${existsSync(locations.settings) ? "present" : "missing"} (${locations.settings})`);
   console.log(`db:        ${existsSync(locations.db) ? "present" : "missing"} (${locations.db})`);
 
@@ -210,6 +239,7 @@ function stopDaemon(): void {
 function purge(): void {
   stopDaemon();
   removeAgent();
+  removeNightlyAgent();
   if (existsSync(locations.home)) rmSync(locations.home, { recursive: true, force: true });
   console.log(`removed ${locations.home}`);
 }

@@ -15,7 +15,9 @@ export const locations = {
   scheduler: join(home, "scheduler.json"),
   launchAgents,
   plistLocal: join(home, "kodama.agent.plist"),
-  plistInstalled: join(launchAgents, "codes.kodama.agent.plist")
+  plistInstalled: join(launchAgents, "codes.kodama.agent.plist"),
+  plistNightlyLocal: join(home, "kodama.nightly.plist"),
+  plistNightlyInstalled: join(launchAgents, "codes.kodama.nightly.plist")
 };
 
 export function ensureHomeTree(): void {

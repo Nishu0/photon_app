@@ -202,7 +202,19 @@ Check boxes as each piece lands. Feel free to re-scope.
 - [x] write this doc
 - [x] install `@anthropic-ai/claude-agent-sdk`
 - [x] install `convex`
-- [x] `convex/schema.ts` with conversations, messages, memories, memoryEvents, spendLedger, sessionState
+- [x] `convex/schema.ts` long-term schema (20+ tables) organized by domain:
+  - **users & auth**: users, userProfile, userSecrets, oauthProviders, oauthAccounts, deviceTokens
+  - **conversations**: conversationFolders, conversations, messages, messageEmbeddings
+  - **ingress**: imessageDedup, sessionState
+  - **memory**: memories (+ embedding/pinned/tags), memoryEvents, memoryRecords (snapshots), facts (key/value), criticalMemories via `pinned` flag
+  - **knowledge graph**: graphNodes, graphEdges
+  - **knowledge library**: libraryCategories, libraryCollections, libraryEntries
+  - **intelligence**: intelligenceSources, intelligenceRuns, intelligenceFindings, extractionRuns
+  - **automation**: scheduledWorkflows, workflowConversations, workflowExecutionLogs, skills, styleExamples
+  - **agent runtime**: agentRuns, toolCalls, spendLedger
+  - **user inbox**: urgentItems, urgentSettings
+  - **domain (v1 migration targets)**: tasks, journals, reminders, watches
+  - **sandboxes**: isolated exploration contexts with optional memory isolation + per-sandbox spend cap
 - [x] `src/v2/` scaffolding (orchestrator, agents, memory, nightly, guardrails, convex)
 - [ ] `convex dev` booted locally + env wiring (`CONVEX_URL`)
 - [ ] env additions: `ANTHROPIC_API_KEY`, `CONVEX_URL`, `CONVEX_DEPLOY_KEY`
@@ -243,7 +255,7 @@ Check boxes as each piece lands. Feel free to re-scope.
 - [x] wire actual Sonnet/Opus calls into `consolidate` / `adversary` / `judge` closures (`src/v2/nightly/agents.ts` via `@anthropic-ai/sdk`)
 - [ ] audit rows on `memoryEvents` (adapter writes them for accessed/promoted/pruned/merged; verify on real Convex)
 - [x] launchd plist generator for nightly cron (`src/v2/nightly/plist.ts`) + entry stub (`src/v2/nightly/entry.ts`)
-- [ ] install job at 03:00 local (plist is generated; `kodama install --v2` command not yet wired)
+- [x] install job at 03:00 local (`kodama install-nightly` / `kodama uninstall-nightly` wired; status shows nightly state)
 
 ### Guardrails
 - [x] per-agent spend cap config (`src/v2/guardrails/spend.ts`)
