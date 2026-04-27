@@ -220,6 +220,13 @@ export default defineSchema({
     sourceAgent: v.optional(v.string()),      // agent that created it
     tags: v.optional(v.array(v.string())),
     pinned: v.optional(v.boolean()),          // never decay / prune
+    lifecycle: v.optional(v.union(            // active | archived | pruned (optional during widen)
+      v.literal("active"),
+      v.literal("archived"),
+      v.literal("pruned")
+    )),
+    corrects: v.optional(v.string()),         // for segment="correction": prior wrong belief
+    supersedes: v.optional(v.array(v.id("memories"))), // memories this one replaces
     createdAt: v.number(),
     lastAccessedAt: v.number(),
     accessCount: v.number()
@@ -227,7 +234,13 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_user_segment", ["userId", "segment"])
     .index("by_user_bucket", ["userId", "bucket"])
-    .index("by_user_pinned", ["userId", "pinned"]),
+    .index("by_user_pinned", ["userId", "pinned"])
+    .index("by_user_lifecycle", ["userId", "lifecycle"])
+    .vectorIndex("by_embedding", {
+      vectorField: "embedding",
+      dimensions: 1024,
+      filterFields: ["userId", "lifecycle"]
+    }),
 
   memoryEvents: defineTable({
     memoryId: v.id("memories"),
@@ -241,10 +254,15 @@ export default defineSchema({
       v.literal("accessed"),
       v.literal("modified"),
       v.literal("pinned"),
-      v.literal("unpinned")
+      v.literal("unpinned"),
+      v.literal("recalled"),
+      v.literal("written"),
+      v.literal("extracted"),
+      v.literal("archived"),
+      v.literal("superseded")
     ),
     reason: v.optional(v.string()),
-    actor: v.optional(v.string()),            // "agent" | "consolidator" | "judge" | "user"
+    actor: v.optional(v.string()),            // "agent" | "consolidator" | "judge" | "user" | "extractor" | "cleaner"
     meta: v.optional(v.any()),
     at: v.number()
   })
@@ -543,16 +561,40 @@ export default defineSchema({
   toolCalls: defineTable({
     runId: v.id("agentRuns"),
     userId: v.string(),
+    agentName: v.optional(v.string()),        // sub-agent name e.g. "memory" | "twitter"
     toolName: v.string(),
+    service: v.optional(v.string()),          // external service slug: "twitterapi" | "voyage" | "claude" | "imessage"
     input: v.optional(v.any()),
     output: v.optional(v.any()),
+    error: v.optional(v.string()),
     status: v.union(v.literal("success"), v.literal("error")),
     durationMs: v.optional(v.number()),
     at: v.number()
   })
     .index("by_run", ["runId"])
     .index("by_user_at", ["userId", "at"])
-    .index("by_tool", ["toolName"]),
+    .index("by_tool", ["toolName"])
+    .index("by_user_service", ["userId", "service"]),
+
+  // live "what's running right now" feed. one row per active service call.
+  // marked finished when the call returns; debug UI subscribes to status="active".
+  serviceUsage: defineTable({
+    userId: v.string(),
+    runId: v.optional(v.id("agentRuns")),
+    agentName: v.string(),                    // "memory" | "twitter" | "parent" | ...
+    service: v.string(),                      // "twitterapi" | "voyage" | "claude" | "convex" | "imessage" | ...
+    toolName: v.optional(v.string()),         // mcp tool name if applicable
+    status: v.union(v.literal("active"), v.literal("finished"), v.literal("error")),
+    startedAt: v.number(),
+    finishedAt: v.optional(v.number()),
+    durationMs: v.optional(v.number()),
+    error: v.optional(v.string()),
+    meta: v.optional(v.any())                 // free-form per-service detail
+  })
+    .index("by_user_status", ["userId", "status"])
+    .index("by_run", ["runId"])
+    .index("by_user_startedAt", ["userId", "startedAt"])
+    .index("by_service", ["service"]),
 
   spendLedger: defineTable({
     runId: v.string(),
