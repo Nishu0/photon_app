@@ -8,7 +8,13 @@
  * @module
  */
 
+import type * as agentRuns from "../agentRuns.js";
+import type * as conversations from "../conversations.js";
 import type * as memories from "../memories.js";
+import type * as messages from "../messages.js";
+import type * as serviceUsage from "../serviceUsage.js";
+import type * as spendLedger from "../spendLedger.js";
+import type * as toolCallsLog from "../toolCallsLog.js";
 
 import type {
   ApiFromModules,
@@ -17,7 +23,13 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  agentRuns: typeof agentRuns;
+  conversations: typeof conversations;
   memories: typeof memories;
+  messages: typeof messages;
+  serviceUsage: typeof serviceUsage;
+  spendLedger: typeof spendLedger;
+  toolCallsLog: typeof toolCallsLog;
 }>;
 
 /**
