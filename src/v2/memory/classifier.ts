@@ -1,4 +1,4 @@
-import { SEGMENT_PROFILES, type Segment, SEGMENTS } from "./segments";
+import { SEGMENT_PROFILES, type Segment, SEGMENTS } from "./types";
 
 export interface ClassifierInput {
   content: string;
