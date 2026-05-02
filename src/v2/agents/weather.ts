@@ -1,6 +1,7 @@
-import { createSdkMcpServer, tool, type Options } from "@anthropic-ai/claude-agent-sdk";
+import { createSdkMcpServer, tool, type Options } from "../ai/mcp";
 import { z } from "zod";
 import type { SubAgentDef } from "./base";
+import { recordServiceCall, recordToolCall, type ObsContext } from "../observe";
 
 export const WEATHER_AGENT_PROMPT = `you are the weather sub-agent inside kodama. you answer current conditions and short forecasts using the open-meteo api (no key required).
 
@@ -61,10 +62,20 @@ async function geocode(location: string): Promise<GeocodeHit | null> {
   return data.results?.[0] ?? null;
 }
 
-export function buildWeatherAgent(): {
+interface WeatherAgentDeps {
+  obs?: ObsContext;
+}
+
+export function buildWeatherAgent(deps: WeatherAgentDeps = {}): {
   def: SubAgentDef;
   mcpServers: Options["mcpServers"];
 } {
+  const obs: ObsContext = deps.obs ?? { userId: "unknown", agentName: "weather" };
+  const wrap = <T>(toolName: string, input: unknown, fn: () => Promise<T>) =>
+    recordToolCall({ ...obs, toolName, input }, fn);
+  const callOpenMeteo = <T>(toolName: string, fn: () => Promise<T>) =>
+    recordServiceCall({ ...obs, service: "open-meteo", toolName }, fn);
+
   const server = createSdkMcpServer({
     name: "kodama-weather",
     version: "1.0.0",
@@ -76,56 +87,61 @@ export function buildWeatherAgent(): {
           location: z.string().min(1).max(120),
           unit: z.enum(["celsius", "fahrenheit"]).default("celsius")
         },
-        async ({ location, unit }) => {
-          const hit = await geocode(location);
-          if (!hit) {
+        (args) =>
+          wrap("weather_now", args, async () => {
+            const hit = await callOpenMeteo("geocode", () => geocode(args.location));
+            if (!hit) {
+              return {
+                content: [
+                  { type: "text", text: JSON.stringify({ ok: false, error: `no match for "${args.location}"` }) }
+                ]
+              };
+            }
+            const url =
+              `${FORECAST_URL}?latitude=${hit.latitude}&longitude=${hit.longitude}` +
+              `&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m` +
+              `&temperature_unit=${args.unit}&wind_speed_unit=kmh&timezone=auto`;
+            const res = await callOpenMeteo("forecast.now", () => fetch(url));
+            if (!res.ok) {
+              return {
+                content: [
+                  { type: "text", text: JSON.stringify({ ok: false, error: `forecast ${res.status}` }) }
+                ]
+              };
+            }
+            const data = (await res.json()) as {
+              current?: {
+                temperature_2m: number;
+                apparent_temperature: number;
+                relative_humidity_2m: number;
+                weather_code: number;
+                wind_speed_10m: number;
+              };
+            };
+            const c = data.current;
+            if (!c) {
+              return {
+                content: [{ type: "text", text: JSON.stringify({ ok: false, error: "no current data" }) }]
+              };
+            }
             return {
-              content: [{ type: "text", text: JSON.stringify({ ok: false, error: `no match for "${location}"` }) }]
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify({
+                    ok: true,
+                    location: `${hit.name}${hit.admin1 ? ", " + hit.admin1 : ""}${hit.country ? ", " + hit.country : ""}`,
+                    temperature: c.temperature_2m,
+                    feels_like: c.apparent_temperature,
+                    humidity_pct: c.relative_humidity_2m,
+                    wind_kmh: c.wind_speed_10m,
+                    conditions: codeLabel(c.weather_code),
+                    unit: args.unit
+                  })
+                }
+              ]
             };
-          }
-          const url =
-            `${FORECAST_URL}?latitude=${hit.latitude}&longitude=${hit.longitude}` +
-            `&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m` +
-            `&temperature_unit=${unit}&wind_speed_unit=kmh&timezone=auto`;
-          const res = await fetch(url);
-          if (!res.ok) {
-            return {
-              content: [{ type: "text", text: JSON.stringify({ ok: false, error: `forecast ${res.status}` }) }]
-            };
-          }
-          const data = (await res.json()) as {
-            current?: {
-              temperature_2m: number;
-              apparent_temperature: number;
-              relative_humidity_2m: number;
-              weather_code: number;
-              wind_speed_10m: number;
-            };
-          };
-          const c = data.current;
-          if (!c) {
-            return {
-              content: [{ type: "text", text: JSON.stringify({ ok: false, error: "no current data" }) }]
-            };
-          }
-          return {
-            content: [
-              {
-                type: "text",
-                text: JSON.stringify({
-                  ok: true,
-                  location: `${hit.name}${hit.admin1 ? ", " + hit.admin1 : ""}${hit.country ? ", " + hit.country : ""}`,
-                  temperature: c.temperature_2m,
-                  feels_like: c.apparent_temperature,
-                  humidity_pct: c.relative_humidity_2m,
-                  wind_kmh: c.wind_speed_10m,
-                  conditions: codeLabel(c.weather_code),
-                  unit
-                })
-              }
-            ]
-          };
-        }
+          })
       ),
       tool(
         "weather_forecast",
@@ -135,59 +151,64 @@ export function buildWeatherAgent(): {
           days: z.number().int().min(1).max(7).default(3),
           unit: z.enum(["celsius", "fahrenheit"]).default("celsius")
         },
-        async ({ location, days, unit }) => {
-          const hit = await geocode(location);
-          if (!hit) {
+        (args) =>
+          wrap("weather_forecast", args, async () => {
+            const hit = await callOpenMeteo("geocode", () => geocode(args.location));
+            if (!hit) {
+              return {
+                content: [
+                  { type: "text", text: JSON.stringify({ ok: false, error: `no match for "${args.location}"` }) }
+                ]
+              };
+            }
+            const url =
+              `${FORECAST_URL}?latitude=${hit.latitude}&longitude=${hit.longitude}` +
+              `&daily=temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max` +
+              `&temperature_unit=${args.unit}&forecast_days=${args.days}&timezone=auto`;
+            const res = await callOpenMeteo("forecast.daily", () => fetch(url));
+            if (!res.ok) {
+              return {
+                content: [
+                  { type: "text", text: JSON.stringify({ ok: false, error: `forecast ${res.status}` }) }
+                ]
+              };
+            }
+            const data = (await res.json()) as {
+              daily?: {
+                time: string[];
+                temperature_2m_max: number[];
+                temperature_2m_min: number[];
+                weather_code: number[];
+                precipitation_probability_max: number[];
+              };
+            };
+            const d = data.daily;
+            if (!d) {
+              return {
+                content: [{ type: "text", text: JSON.stringify({ ok: false, error: "no daily data" }) }]
+              };
+            }
+            const forecast = d.time.map((date, i) => ({
+              date,
+              high: d.temperature_2m_max[i],
+              low: d.temperature_2m_min[i],
+              conditions: codeLabel(d.weather_code[i] ?? 0),
+              rain_chance_pct: d.precipitation_probability_max[i]
+            }));
             return {
-              content: [{ type: "text", text: JSON.stringify({ ok: false, error: `no match for "${location}"` }) }]
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify({
+                    ok: true,
+                    location: `${hit.name}${hit.admin1 ? ", " + hit.admin1 : ""}${hit.country ? ", " + hit.country : ""}`,
+                    unit: args.unit,
+                    forecast
+                  })
+                }
+              ]
             };
-          }
-          const url =
-            `${FORECAST_URL}?latitude=${hit.latitude}&longitude=${hit.longitude}` +
-            `&daily=temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max` +
-            `&temperature_unit=${unit}&forecast_days=${days}&timezone=auto`;
-          const res = await fetch(url);
-          if (!res.ok) {
-            return {
-              content: [{ type: "text", text: JSON.stringify({ ok: false, error: `forecast ${res.status}` }) }]
-            };
-          }
-          const data = (await res.json()) as {
-            daily?: {
-              time: string[];
-              temperature_2m_max: number[];
-              temperature_2m_min: number[];
-              weather_code: number[];
-              precipitation_probability_max: number[];
-            };
-          };
-          const d = data.daily;
-          if (!d) {
-            return {
-              content: [{ type: "text", text: JSON.stringify({ ok: false, error: "no daily data" }) }]
-            };
-          }
-          const forecast = d.time.map((date, i) => ({
-            date,
-            high: d.temperature_2m_max[i],
-            low: d.temperature_2m_min[i],
-            conditions: codeLabel(d.weather_code[i] ?? 0),
-            rain_chance_pct: d.precipitation_probability_max[i]
-          }));
-          return {
-            content: [
-              {
-                type: "text",
-                text: JSON.stringify({
-                  ok: true,
-                  location: `${hit.name}${hit.admin1 ? ", " + hit.admin1 : ""}${hit.country ? ", " + hit.country : ""}`,
-                  unit,
-                  forecast
-                })
-              }
-            ]
-          };
-        }
+          })
       )
     ]
   });
