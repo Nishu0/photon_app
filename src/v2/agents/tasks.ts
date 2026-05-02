@@ -1,8 +1,9 @@
-import { createSdkMcpServer, tool, type Options } from "@anthropic-ai/claude-agent-sdk";
+import { createSdkMcpServer, tool, type Options } from "../ai/mcp";
 import { z } from "zod";
 import type { SubAgentDef } from "./base";
 import type { Store } from "../../store/open";
 import { completeTask, createTask, dropTask, listOpenTasks, snoozeTask } from "../../store/tasks";
+import { recordToolCall, recordServiceCall, type ObsContext } from "../observe";
 
 export const TASKS_AGENT_PROMPT = `you are the tasks sub-agent inside kodama. you own todos and reminders.
 
@@ -21,12 +22,17 @@ rules:
 interface TasksAgentDeps {
   store: Store;
   scheduleReminder: (body: string, at: Date) => Promise<string>;
+  obs?: ObsContext;
 }
 
 export function buildTasksAgent(deps: TasksAgentDeps): {
   def: SubAgentDef;
   mcpServers: Options["mcpServers"];
 } {
+  const obs: ObsContext = deps.obs ?? { userId: "unknown", agentName: "tasks" };
+  const wrap = <T>(toolName: string, input: unknown, fn: () => Promise<T>) =>
+    recordToolCall({ ...obs, toolName, service: "sqlite", input }, fn);
+
   const server = createSdkMcpServer({
     name: "kodama-tasks",
     version: "1.0.0",
@@ -39,64 +45,76 @@ export function buildTasksAgent(deps: TasksAgentDeps): {
           priority: z.number().int().min(1).max(5).default(2),
           due_at_iso: z.string().datetime().optional()
         },
-        async ({ title, priority, due_at_iso }) => {
-          const due = due_at_iso ? new Date(due_at_iso) : undefined;
-          const id = createTask(deps.store, {
-            title,
-            priority,
-            dueAt: due ? due.getTime() : undefined
-          });
-          return { content: [{ type: "text", text: JSON.stringify({ ok: true, id }) }] };
-        }
+        (args) =>
+          wrap("add_task", args, async () => {
+            const due = args.due_at_iso ? new Date(args.due_at_iso) : undefined;
+            const id = createTask(deps.store, {
+              title: args.title,
+              priority: args.priority,
+              dueAt: due ? due.getTime() : undefined
+            });
+            return { content: [{ type: "text", text: JSON.stringify({ ok: true, id }) }] };
+          })
       ),
-      tool("list_tasks", "Return all open tasks.", {}, async () => {
-        const rows = listOpenTasks(deps.store, 25);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(rows.map((t) => ({ id: t.id, title: t.title, priority: t.priority })))
-            }
-          ]
-        };
-      }),
+      tool("list_tasks", "Return all open tasks.", {}, () =>
+        wrap("list_tasks", {}, async () => {
+          const rows = listOpenTasks(deps.store, 25);
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(rows.map((t) => ({ id: t.id, title: t.title, priority: t.priority })))
+              }
+            ]
+          };
+        })
+      ),
       tool(
         "complete_task",
         "Mark a task as done.",
         { id: z.number().int() },
-        async ({ id }) => ({
-          content: [{ type: "text", text: JSON.stringify({ ok: completeTask(deps.store, id) }) }]
-        })
+        (args) =>
+          wrap("complete_task", args, async () => ({
+            content: [{ type: "text", text: JSON.stringify({ ok: completeTask(deps.store, args.id) }) }]
+          }))
       ),
       tool(
         "snooze_task",
         "Snooze a task to a future ISO timestamp.",
         { id: z.number().int(), until_iso: z.string().datetime() },
-        async ({ id, until_iso }) => ({
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({ ok: snoozeTask(deps.store, id, new Date(until_iso).getTime()) })
-            }
-          ]
-        })
+        (args) =>
+          wrap("snooze_task", args, async () => ({
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify({
+                  ok: snoozeTask(deps.store, args.id, new Date(args.until_iso).getTime())
+                })
+              }
+            ]
+          }))
       ),
       tool(
         "drop_task",
         "Discard a task the owner no longer wants.",
         { id: z.number().int() },
-        async ({ id }) => ({
-          content: [{ type: "text", text: JSON.stringify({ ok: dropTask(deps.store, id) }) }]
-        })
+        (args) =>
+          wrap("drop_task", args, async () => ({
+            content: [{ type: "text", text: JSON.stringify({ ok: dropTask(deps.store, args.id) }) }]
+          }))
       ),
       tool(
         "schedule_reminder",
         "Schedule a delayed iMessage reminder at a specific future ISO timestamp.",
         { body: z.string().min(1).max(300), when_iso: z.string().datetime() },
-        async ({ body, when_iso }) => {
-          const id = await deps.scheduleReminder(body, new Date(when_iso));
-          return { content: [{ type: "text", text: JSON.stringify({ ok: true, id }) }] };
-        }
+        (args) =>
+          wrap("schedule_reminder", args, async () => {
+            const id = await recordServiceCall(
+              { ...obs, service: "imessage", toolName: "scheduleReminder" },
+              () => deps.scheduleReminder(args.body, new Date(args.when_iso))
+            );
+            return { content: [{ type: "text", text: JSON.stringify({ ok: true, id }) }] };
+          })
       )
     ]
   });

@@ -1,8 +1,9 @@
-import { createSdkMcpServer, tool, type Options } from "@anthropic-ai/claude-agent-sdk";
+import { createSdkMcpServer, tool, type Options } from "../ai/mcp";
 import { z } from "zod";
 import type { SubAgentDef } from "./base";
 import type { Store } from "../../store/open";
 import { addJournal, averageMoodSince, fetchJournalSince } from "../../store/journal";
+import { recordToolCall, type ObsContext } from "../observe";
 
 export const JOURNAL_AGENT_PROMPT = `you are the journal sub-agent inside kodama. you own the owner's personal journal — notes, moods, wins, gratitude, open questions — and the weekly recap view.
 
@@ -17,12 +18,17 @@ rules:
 
 interface JournalAgentDeps {
   store: Store;
+  obs?: ObsContext;
 }
 
 export function buildJournalAgent(deps: JournalAgentDeps): {
   def: SubAgentDef;
   mcpServers: Options["mcpServers"];
 } {
+  const obs: ObsContext = deps.obs ?? { userId: "unknown", agentName: "journal" };
+  const wrap = <T>(toolName: string, input: unknown, fn: () => Promise<T>) =>
+    recordToolCall({ ...obs, toolName, service: "sqlite", input }, fn);
+
   const server = createSdkMcpServer({
     name: "kodama-journal",
     version: "1.0.0",
@@ -36,38 +42,44 @@ export function buildJournalAgent(deps: JournalAgentDeps): {
           mood_score: z.number().int().min(1).max(10).optional(),
           tags: z.array(z.string().min(1).max(40)).max(8).optional()
         },
-        async ({ kind, body, mood_score, tags }) => {
-          const id = addJournal(deps.store, {
-            kind,
-            body,
-            moodScore: mood_score,
-            tags,
-            capturedAt: Date.now()
-          });
-          return { content: [{ type: "text", text: JSON.stringify({ ok: true, id }) }] };
-        }
+        (args) =>
+          wrap("log_journal", args, async () => {
+            const id = addJournal(deps.store, {
+              kind: args.kind,
+              body: args.body,
+              moodScore: args.mood_score,
+              tags: args.tags,
+              capturedAt: Date.now()
+            });
+            return { content: [{ type: "text", text: JSON.stringify({ ok: true, id }) }] };
+          })
       ),
       tool(
         "recap",
         "Return a recap of the last N days with mood average.",
         { days: z.number().int().min(1).max(90).default(7) },
-        async ({ days }) => {
-          const since = Date.now() - days * 24 * 60 * 60 * 1000;
-          const entries = fetchJournalSince(deps.store, since, 30);
-          const mood = averageMoodSince(deps.store, since);
-          return {
-            content: [
-              {
-                type: "text",
-                text: JSON.stringify({
-                  mood_avg: mood,
-                  entry_count: entries.length,
-                  entries: entries.map((e) => ({ kind: e.kind, body: e.body.slice(0, 240), capturedAt: e.captured_at }))
-                })
-              }
-            ]
-          };
-        }
+        (args) =>
+          wrap("recap", args, async () => {
+            const since = Date.now() - args.days * 24 * 60 * 60 * 1000;
+            const entries = fetchJournalSince(deps.store, since, 30);
+            const mood = averageMoodSince(deps.store, since);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify({
+                    mood_avg: mood,
+                    entry_count: entries.length,
+                    entries: entries.map((e) => ({
+                      kind: e.kind,
+                      body: e.body.slice(0, 240),
+                      capturedAt: e.captured_at
+                    }))
+                  })
+                }
+              ]
+            };
+          })
       )
     ]
   });
