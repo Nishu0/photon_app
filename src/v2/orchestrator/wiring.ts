@@ -1,4 +1,4 @@
-import type { Options } from "@anthropic-ai/claude-agent-sdk";
+import type { Options } from "../ai/mcp";
 import type { AgentName, SubAgentInput, SubAgentResult } from "../types/agent";
 import type { SubAgentDef } from "../agents/base";
 import { runAgent } from "./runAgent";
@@ -25,6 +25,7 @@ export class WiringRegistry implements AgentRegistry {
         runAgent({
           def: wiring.def,
           input,
+          runId: input.runId,
           spendCapUsd: capFor(name),
           mcpServers: wiring.mcpServers
         })
