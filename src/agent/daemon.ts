@@ -19,8 +19,12 @@ export interface DaemonHandles {
 
 export async function startDaemon(store: Store, settings: KodamaSettings): Promise<DaemonHandles> {
   const delayed = new DelayedMessenger(settings);
-  delayed.start();
-  seedDailyCheckins(settings, delayed);
+  if (settings.mode === "local") {
+    delayed.start();
+    seedDailyCheckins(settings, delayed);
+  } else {
+    console.log("[daemon] cloud mode: local iMessage scheduler disabled");
+  }
 
   if (V2_ENABLED) console.log("[daemon] v2 pump enabled (KODAMA_V2=1)");
 
@@ -60,14 +64,18 @@ async function startLocal(
   const inFlight = new Map<string, Promise<void>>();
 
   const watcher = new LocalWatcher({
-    sdk: delayed.sdk,
+    sdk: delayed.sdk!,
     isRecentSentGuid: (guid) => delayed.isRecentSentGuid(guid),
     isRecentEchoContent: (text) => delayed.isRecentEchoContent(text),
     onMessage: async (msg) => dispatch(msg)
   });
 
-  await watcher.start();
-  console.log("[daemon] local watcher started (self-thread enabled)");
+  const watcherEnabled = await watcher.start();
+  if (watcherEnabled) {
+    console.log("[daemon] local watcher started (self-thread enabled)");
+  } else {
+    console.warn("[daemon] local watcher unavailable (inbound local iMessage listening disabled)");
+  }
 
   function dispatch(msg: LocalInbound): void {
     console.log(
@@ -158,6 +166,8 @@ async function startCloud(
                   messageId: message.id,
                   messageText: body,
                   delayed,
+                  sendNow: async (body) => space.send(body),
+                  spectrumMessage: message,
                   twitter: runtime.twitter
                 })
               : handleOwnerMessage({
@@ -166,6 +176,7 @@ async function startCloud(
                   messageId: message.id,
                   messageText: body,
                   delayed,
+                  sendNow: async (body) => space.send(body),
                   spectrumMessage: message,
                   twitter: runtime.twitter,
                   digestDeps: runtime.digestDeps

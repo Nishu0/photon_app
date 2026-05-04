@@ -212,6 +212,10 @@ async function diagnose(): Promise<void> {
     if (s.owner_handle) { ok += 1; console.log("- owner handle: set"); } else { bad += 1; console.log("- owner handle: missing"); }
     console.log(`- mode: ${s.mode}`);
     console.log(`- timezone: ${s.timezone}`);
+    if (process.env.KODAMA_V2 === "1") {
+      console.log("- v2 provider: openrouter (vercel ai sdk)");
+      console.log(`- v2 openrouter base: ${process.env.KODAMA_V2_OPENROUTER_BASE_URL?.trim() || "https://openrouter.ai/api/v1"}`);
+    }
   } catch (err) {
     console.log(`- settings: ${(err as Error).message}`);
     bad += 1;

@@ -18,13 +18,14 @@ export interface ReplyInput {
   messageId: string;
   messageText: string;
   delayed: DelayedMessenger;
+  sendNow?: (body: string) => Promise<void>;
   spectrumMessage?: Message;
   twitter?: TwitterApi;
   digestDeps?: DigestDeps;
 }
 
 export async function handleOwnerMessage(input: ReplyInput): Promise<void> {
-  const { store, settings, messageId, messageText, delayed, spectrumMessage, twitter, digestDeps } = input;
+  const { store, settings, messageId, messageText, delayed, sendNow, spectrumMessage, twitter, digestDeps } = input;
 
   writeThread(store, { author: "owner", body: messageText, refMessageId: messageId });
 
@@ -82,7 +83,8 @@ export async function handleOwnerMessage(input: ReplyInput): Promise<void> {
     if (canReact) {
       await acknowledge(spectrumMessage!, intent.reaction ?? "like");
     } else {
-      await delayed.sendNow("ok, logged.");
+      if (sendNow) await sendNow("ok, logged.");
+      else await delayed.sendNow("ok, logged.");
     }
     return;
   }
@@ -94,7 +96,8 @@ export async function handleOwnerMessage(input: ReplyInput): Promise<void> {
 
   const replyBody = trimmed.slice(0, 420);
   writeThread(store, { author: "kodama", body: replyBody, refMessageId: messageId });
-  await delayed.sendNow(replyBody);
+  if (sendNow) await sendNow(replyBody);
+  else await delayed.sendNow(replyBody);
 }
 
 function normalizeForEcho(s: string): string {

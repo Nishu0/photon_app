@@ -18,25 +18,28 @@ export interface LocalWatcherOptions {
 }
 
 /**
- * Thin wrapper over IMessageSDK.startWatching that accepts self-thread
- * messages (is_from_me=1) and dedups kodama's own echoes via guid.
- * The SDK is constructed with watcher.excludeOwnMessages=false (see
- * DelayedMessenger) so the watcher delivers our own messages.
+ * Thin wrapper over IMessageSDK.startWatching. The SDK is constructed
+ * with watcher.excludeOwnMessages=true so is_from_me=1 rows never reach
+ * us — this avoids the duplicate delivery iMessage creates for each
+ * self-thread message (one sent row + one received row).
  */
 export class LocalWatcher {
   private started = false;
+  private disabledByPermission = false;
   private readonly seen = new Map<string, number>();
   private readonly seenTtlMs = 300_000;
 
   constructor(private readonly opts: LocalWatcherOptions) {}
 
-  async start(): Promise<void> {
-    if (this.started) return;
+  async start(): Promise<boolean> {
+    if (this.started) return !this.disabledByPermission;
     this.started = true;
+    this.disabledByPermission = false;
     await this.opts.sdk.startWatching({
       onMessage: (msg) => this.handle(msg),
-      onError: (err) => console.error("[local-watch] watcher error", err)
+      onError: (err) => this.onWatchError(err)
     });
+    return !this.disabledByPermission;
   }
 
   async stop(): Promise<void> {
@@ -57,7 +60,10 @@ export class LocalWatcher {
       this.seen.set(msg.guid, Date.now());
       return;
     }
-    if (msg.isFromMe && this.opts.isRecentEchoContent(text)) {
+    // Self-thread messages can come back as mirrored inbound rows where
+    // `isFromMe` may be false. If content matches a very recent outbound send,
+    // treat it as echo and drop it.
+    if (this.opts.isRecentEchoContent(text)) {
       this.seen.set(msg.guid, Date.now());
       return;
     }
@@ -81,5 +87,27 @@ export class LocalWatcher {
     for (const [k, t] of this.seen) {
       if (t < threshold) this.seen.delete(k);
     }
+  }
+
+  private onWatchError(err: unknown): void {
+    if (this.isMessagesDbPermissionError(err)) {
+      if (this.disabledByPermission) return;
+      this.disabledByPermission = true;
+      this.started = false;
+      this.opts.sdk.stopWatching?.();
+      console.warn(
+        "[local-watch] disabled: cannot read Messages database. Grant Full Disk Access, then run `bun run src/cli.ts diagnose`."
+      );
+      return;
+    }
+    console.error("[local-watch] watcher error", err);
+  }
+
+  private isMessagesDbPermissionError(err: unknown): boolean {
+    const code = typeof err === "object" && err !== null ? (err as { code?: unknown }).code : undefined;
+    if (code !== "DATABASE") return false;
+    const message = err instanceof Error ? err.message : String(err);
+    const lower = message.toLowerCase();
+    return lower.includes("chat.db") && lower.includes("authorization denied");
   }
 }

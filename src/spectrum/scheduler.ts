@@ -10,28 +10,34 @@ export interface ScheduledOutbound {
   content: string;
 }
 
-/**
- * Wraps MessageScheduler + IMessageSDK for one owner handle.
- * In local mode the same SDK is shared with LocalWatcher so the watcher
- * can see is_from_me=1 messages (for self-thread) while still filtering
- * out our own echoes via sent-guid tracking.
- */
+export interface SendNowOptions {
+  typingDotsBefore?: boolean;
+  typingDotsText?: string;
+  typingDelayMs?: number;
+}
+
 export class DelayedMessenger {
-  readonly sdk: IMessageSDK;
-  private readonly scheduler: MessageScheduler;
+  readonly sdk: IMessageSDK | null;
+  private readonly scheduler: MessageScheduler | null;
   private readonly owner: string;
   private readonly sentGuids = new Map<string, number>();
   private readonly sentContent = new Map<string, number>();
   private readonly sentTtlMs = 180_000;
 
   constructor(settings: KodamaSettings) {
+    this.owner = settings.owner_handle;
+    if (settings.mode === "cloud") {
+      this.sdk = null;
+      this.scheduler = null;
+      return;
+    }
+
     this.sdk = new IMessageSDK({
       debug: false,
       watcher: {
-        excludeOwnMessages: settings.mode !== "local"
+        excludeOwnMessages: true
       }
     });
-    this.owner = settings.owner_handle;
 
     this.scheduler = new MessageScheduler(
       this.sdk,
@@ -53,7 +59,22 @@ export class DelayedMessenger {
 
   start(): void {}
 
-  async sendNow(body: string): Promise<void> {
+  async sendNow(body: string, options?: SendNowOptions): Promise<void> {
+    if (options?.typingDotsBefore) {
+      const dots = (options.typingDotsText ?? "...").trim();
+      if (dots && dots !== body.trim()) {
+        await this.sendRaw(dots);
+        const waitMs = clampTypingDelay(options.typingDelayMs ?? 700);
+        await new Promise((resolve) => setTimeout(resolve, waitMs));
+      }
+    }
+    await this.sendRaw(body);
+  }
+
+  private async sendRaw(body: string): Promise<void> {
+    if (!this.sdk) {
+      throw new Error("local send unavailable in cloud mode; use spectrum space.send");
+    }
     const key = normalizeContent(body);
     this.sentContent.set(key, Date.now());
     const result = await this.sdk.send(this.owner, body);
@@ -73,7 +94,13 @@ export class DelayedMessenger {
     return this.sentContent.has(normalizeContent(text));
   }
 
+  markRecentSentContent(text: string): void {
+    this.sentContent.set(normalizeContent(text), Date.now());
+    this.gcSent();
+  }
+
   scheduleOnce(body: string, sendAt: Date, id?: string): string {
+    if (!this.scheduler) throw new Error("local scheduler unavailable in cloud mode");
     return this.scheduler.schedule({
       to: this.owner,
       content: body,
@@ -83,6 +110,7 @@ export class DelayedMessenger {
   }
 
   scheduleRepeat(body: string, startAt: Date, interval: RecurrenceInterval, id?: string): string {
+    if (!this.scheduler) throw new Error("local scheduler unavailable in cloud mode");
     return this.scheduler.scheduleRecurring({
       to: this.owner,
       content: body,
@@ -93,11 +121,11 @@ export class DelayedMessenger {
   }
 
   cancel(id: string): boolean {
-    return this.scheduler.cancel(id);
+    return this.scheduler ? this.scheduler.cancel(id) : false;
   }
 
   pending(): ScheduledOutbound[] {
-    return this.scheduler.getPending().map((task) => ({
+    return (this.scheduler?.getPending() ?? []).map((task) => ({
       id: task.id,
       kind: task.type === "recurring" ? "recurring" : "once",
       sendAt: task.sendAt,
@@ -107,8 +135,8 @@ export class DelayedMessenger {
   }
 
   async drain(): Promise<void> {
-    this.scheduler.destroy();
-    await this.sdk.close();
+    this.scheduler?.destroy();
+    await this.sdk?.close();
   }
 
   private gcSent(): void {
@@ -124,6 +152,11 @@ export class DelayedMessenger {
 
 function normalizeContent(s: string): string {
   return s.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function clampTypingDelay(ms: number): number {
+  if (!Number.isFinite(ms)) return 700;
+  return Math.max(250, Math.min(2500, Math.round(ms)));
 }
 
 export type { Reminder };
