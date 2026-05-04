@@ -9,7 +9,6 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.114",
     "@openrouter/ai-sdk-provider": "^2.5.1",
     "@photon-ai/imessage-kit": "2.1.2",
     "ai": "^6.0.156",
