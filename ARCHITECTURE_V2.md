@@ -7,7 +7,7 @@ v1 is a single tool-use loop against one LLM with every tool registered at once.
 | | v1 | v2 |
 | --- | --- | --- |
 | Agent shape | single loop, all tools visible | parent dispatcher + specialized sub-agents, scoped tools |
-| SDK | AI SDK v6 + OpenRouter | `@anthropic-ai/claude-agent-sdk` |
+| SDK | AI SDK v6 + OpenRouter | AI SDK v6 + OpenRouter |
 | DB | `bun:sqlite` | Convex (reactive) |
 | Memory | flat rows, never forgets | 7 segments × 3 buckets × decay |
 | Curation | manual | nightly adversarial cleanup (consolidator → adversary → judge) |
@@ -28,7 +28,7 @@ iMessage ─► parent agent ─► dispatch(agent, instructions)
 ```
 
 Every sub-agent:
-- starts a fresh `query()` from `@anthropic-ai/claude-agent-sdk` with its own system prompt and tool whitelist
+- starts a fresh AI SDK tool loop with its own system prompt and tool whitelist
 - has a per-run spend cap ($40 default)
 - **cannot** spawn further sub-agents (recursion guard)
 - reads/writes memory through a thin adapter — never touches the db directly
@@ -40,25 +40,20 @@ Every sub-agent:
 One tool: `dispatch_to_agent(name, instructions)`. That's it.
 
 ```ts
-import { query } from "@anthropic-ai/claude-agent-sdk";
-
-for await (const event of query({
+await generateText({
+  model,
+  system: parentPrompt,
   prompt: userMessage,
-  options: {
-    systemPrompt: parentPrompt,
-    allowedTools: ["dispatch_to_agent"],
-    maxTurns: 4,
-  }
-})) {
-  // stream parent decisions
-}
+  tools: { dispatch_to_agent: /* ... */ },
+  stopWhen: stepCountIs(4)
+});
 ```
 
 The parent owns: intent routing, reply-style choice (tapback vs text), and stitching sub-agent outputs into the final iMessage reply. No domain logic.
 
 ### 2. Sub-agents
 
-Each is `query()` with its own prompt + tool list + memory slice.
+Each runs via `generateText()` with its own prompt + tool list + memory slice.
 
 | Agent | Tools |
 | --- | --- |
@@ -200,7 +195,7 @@ Check boxes as each piece lands. Feel free to re-scope.
 
 ### Foundations
 - [x] write this doc
-- [x] install `@anthropic-ai/claude-agent-sdk`
+- [x] install AI SDK v6 + OpenRouter provider
 - [x] install `convex`
 - [x] `convex/schema.ts` long-term schema (20+ tables) organized by domain:
   - **users & auth**: users, userProfile, userSecrets, oauthProviders, oauthAccounts, deviceTokens
@@ -243,8 +238,8 @@ Check boxes as each piece lands. Feel free to re-scope.
 - [x] `twitter` (watch/unwatch/list/recent — wraps v1 store + twitterapi client)
 - [x] `journal` (log + recap — wraps v1 journal store)
 - [x] `tasks` (add/list/complete/snooze/drop/schedule_reminder — wraps v1 tasks store)
-- [ ] `email` (reuses v1 `judgeEmail` policy; needs OAuth)
-- [ ] `weather`
+- [x] `email` (list_unread / read / search — uses v1 `triage` policy for redaction; needs `GMAIL_ACCESS_TOKEN` env until proper OAuth lands)
+- [x] `weather` (now / forecast — open-meteo, no api key)
 - [ ] `youtube`
 
 ### Nightly cleanup
@@ -252,7 +247,7 @@ Check boxes as each piece lands. Feel free to re-scope.
 - [x] types + pipeline (`src/v2/nightly/cleanup.ts`) with tests
 - [x] debate → judge flow (judge only runs on contested proposals)
 - [x] apply mutations through the adapter (prune / promote / merge paths)
-- [x] wire actual Sonnet/Opus calls into `consolidate` / `adversary` / `judge` closures (`src/v2/nightly/agents.ts` via `@anthropic-ai/sdk`)
+- [x] wire actual Sonnet/Opus calls into `consolidate` / `adversary` / `judge` closures (`src/v2/nightly/agents.ts` via AI SDK + OpenRouter)
 - [ ] audit rows on `memoryEvents` (adapter writes them for accessed/promoted/pruned/merged; verify on real Convex)
 - [x] launchd plist generator for nightly cron (`src/v2/nightly/plist.ts`) + entry stub (`src/v2/nightly/entry.ts`)
 - [x] install job at 03:00 local (`kodama install-nightly` / `kodama uninstall-nightly` wired; status shows nightly state)
