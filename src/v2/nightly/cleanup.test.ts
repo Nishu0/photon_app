@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
 import { runNightlyCleanup } from "./cleanup";
-import type { MemoryAdapter, MemoryRecord } from "../memory/adapter";
+import type { MemoryAdapter, MemoryRecord } from "../memory/types";
 
 function makeAdapter(rows: MemoryRecord[]): {
   adapter: MemoryAdapter;
@@ -8,7 +8,7 @@ function makeAdapter(rows: MemoryRecord[]): {
 } {
   const log: string[] = [];
   const adapter: MemoryAdapter = {
-    recall: async () => rows,
+    recall: async () => rows.map((record) => ({ record, mode: "recency" as const })),
     recallBySegment: async () => rows,
     save: async () => "new",
     touch: async () => void 0,
@@ -17,6 +17,9 @@ function makeAdapter(rows: MemoryRecord[]): {
     },
     prune: async (id) => {
       log.push(`prune ${id}`);
+    },
+    setLifecycle: async (id, lifecycle) => {
+      log.push(`lifecycle ${id} -> ${lifecycle}`);
     },
     merge: async (keep, drop) => {
       log.push(`merge ${drop}->${keep}`);

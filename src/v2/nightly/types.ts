@@ -1,4 +1,4 @@
-import type { Bucket, Segment } from "../memory/segments";
+import type { Bucket, Segment } from "../memory/types";
 
 export interface MemorySummary {
   id: string;

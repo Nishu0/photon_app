@@ -1,5 +1,5 @@
-import type { MemoryAdapter, MemoryRecord } from "../memory/adapter";
-import { effectiveImportance } from "../memory/decay";
+import type { MemoryAdapter, MemoryRecord } from "../memory/types";
+import { effectiveImportance } from "../memory/clean";
 import type {
   AdversaryResponse,
   CleanupRun,
@@ -29,7 +29,8 @@ export interface CleanupDeps {
 export async function runNightlyCleanup(deps: CleanupDeps): Promise<CleanupRun> {
   const now = deps.now ?? Date.now();
   const startedAt = now;
-  const memories = await deps.adapter.recall(deps.userId, 500);
+  const hits = await deps.adapter.recall(deps.userId, { limit: 500 });
+  const memories = hits.map((h) => h.record);
   const summaries = memories.map((m) => summarize(m, now, memories));
 
   const proposals = summaries.length > 0 ? await deps.consolidate(summaries) : [];

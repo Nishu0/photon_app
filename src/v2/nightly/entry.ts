@@ -1,4 +1,3 @@
-import Anthropic from "@anthropic-ai/sdk";
 import { loadSettings } from "../../settings";
 import { openStore } from "../../store/open";
 import { runNightlyCleanup } from "./cleanup";
@@ -10,9 +9,9 @@ export async function main(): Promise<void> {
   using store = openStore();
   void store;
 
-  const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
+  const apiKey = settings.openrouter_api_key?.trim() || process.env.KODAMA_OPENROUTER_KEY?.trim();
   if (!apiKey) {
-    console.log("[nightly] skipped: ANTHROPIC_API_KEY not set");
+    console.log("[nightly] skipped: openrouter key not set");
     return;
   }
 
@@ -20,8 +19,12 @@ export async function main(): Promise<void> {
   // running and `convex/_generated/api.js` exists.
   const adapter = makeInMemoryAdapter();
 
-  const client = new Anthropic({ apiKey });
-  const closures = makeAllClosures({ client });
+  const closures = makeAllClosures({
+    openrouterApiKey: apiKey,
+    openrouterBaseUrl: process.env.KODAMA_V2_OPENROUTER_BASE_URL?.trim() || "https://openrouter.ai/api/v1",
+    sonnetModel: process.env.KODAMA_NIGHTLY_SONNET_MODEL?.trim() || settings.model,
+    opusModel: process.env.KODAMA_NIGHTLY_OPUS_MODEL?.trim()
+  });
 
   const result = await runNightlyCleanup({
     adapter,
