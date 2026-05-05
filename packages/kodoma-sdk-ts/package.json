@@ -1,0 +1,52 @@
+{
+  "name": "kodoma-ts",
+  "version": "0.1.0",
+  "description": "TypeScript SDK for building agent-native messaging interfaces",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "clean": "rm -rf dist",
+    "build": "bun run clean && bun build ./src/index.ts --outdir ./dist --target node --format esm --packages external && bunx tsc -p ./tsconfig.types.json",
+    "typecheck": "bunx tsc -p ./tsconfig.json",
+    "example": "bun run ./examples/terminal.ts",
+    "prepublishOnly": "bun run typecheck && bun run build"
+  },
+  "keywords": [
+    "agent",
+    "sdk",
+    "messaging",
+    "platform",
+    "typescript",
+    "interfaces"
+  ],
+  "author": "Nisarg Thakkar",
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Nishu0/kodama.git"
+  },
+  "homepage": "https://github.com/Nishu0/kodama#readme",
+  "bugs": {
+    "url": "https://github.com/Nishu0/kodama/issues"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}
