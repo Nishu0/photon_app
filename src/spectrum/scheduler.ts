@@ -94,11 +94,6 @@ export class DelayedMessenger {
     return this.sentContent.has(normalizeContent(text));
   }
 
-  markRecentSentContent(text: string): void {
-    this.sentContent.set(normalizeContent(text), Date.now());
-    this.gcSent();
-  }
-
   scheduleOnce(body: string, sendAt: Date, id?: string): string {
     if (!this.scheduler) throw new Error("local scheduler unavailable in cloud mode");
     return this.scheduler.schedule({
