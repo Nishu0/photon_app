@@ -6,7 +6,15 @@
   "scripts": {
     "dev": "bun run src/cli.ts",
     "serve": "bun run src/cli.ts serve",
-    "test": "bun test"
+    "test": "bun test",
+    "dashboard:dev": "bun run --cwd apps/kodama-web dev",
+    "dashboard:build": "bun run --cwd apps/kodama-web build",
+    "api:dev": "bun run --cwd apps/api dev",
+    "api:start": "bun run --cwd apps/api start",
+    "web:dev": "bun run --cwd apps/kodama-web dev",
+    "web:build": "bun run --cwd apps/kodama-web build",
+    "sdk:example": "bun run --cwd packages/kodoma-sdk-ts example",
+    "sdk:build": "bun run --cwd packages/kodoma-sdk-ts build"
   },
   "dependencies": {
     "@openrouter/ai-sdk-provider": "^2.5.1",
